@@ -8,6 +8,7 @@ from aiohttp import web
 from aiojobs.aiohttp import setup
 
 from hubcast.account_map.file import FileMap, FileMapError
+from hubcast.account_map.gitlab_oauth import GitlabOauthMap
 from hubcast.clients.github import GitHubClientFactory
 from hubcast.clients.gitlab import GitLabClientFactory
 from hubcast.config import Config, ConfigError
@@ -51,6 +52,13 @@ def main():
         except FileMapError:
             log.exception("Error initializing file account map")
             sys.exit(1)
+    elif conf.account_map_type == "gitlab_oauth":
+        account_map = GitlabOauthMap(
+            gitlab_url=conf.gl.instance_url,
+            access_token=conf.gl_oauth_access_token,
+            oauth_provider=conf.gl_oauth_provider,
+        )
+
     else:
         log.error(
             "Unknown account map type",

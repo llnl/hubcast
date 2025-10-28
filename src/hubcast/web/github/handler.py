@@ -31,6 +31,9 @@ class GitHubHandler:
                 extra={"event_type": event.event, "delivery_id": event.delivery_id},
             )
 
+            # TODO if gitlab_oauth is the account mapper and github is the provider
+            # we'll need to input the numerical github user id (not username) into the account map
+            # what the best way to address this/propagate the config down here so we can input the right user id?
             github_user = event.data["sender"]["login"]
             gitlab_user = self.account_map(github_user)
 

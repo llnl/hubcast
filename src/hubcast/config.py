@@ -14,6 +14,10 @@ class Config:
         self.account_map_path = env_get("HC_ACCOUNT_MAP_PATH")
         self.logging_config_path = env_get("HC_LOGGING_CONFIG_PATH")
 
+        if self.account_map_type == "gitlab_oauth":
+            self.gl_oauth_access_token = env_get("HC_GL_OAUTH_ACCESS_TOKEN")
+            self.gl_oauth_provider = env_get("HC_GL_OAUTH_PROVIDER")
+
         self.gh = GitHubConfig()
         self.gl = GitLabConfig()
 
