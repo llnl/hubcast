@@ -7,4 +7,4 @@ gidgetlab==2.1.1
 hatchling==1.28.0
 pytest-asyncio==1.3.0
 pytest-mock==3.15.1
-pytest==8.4.1
+pytest==9.0.2
