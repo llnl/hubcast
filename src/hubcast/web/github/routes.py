@@ -159,6 +159,15 @@ async def sync_pr(pull_request, gh, gl, gl_user):
 
     # get the repository configuration from .github/hubcast.yml
     repo_config = await get_repo_config(gh, src_fullname)
+    if not repo_config.draft_sync and pull_request["draft"]:
+        if repo_config.draft_sync_msg:
+            await gh.set_check_status(
+                want_sha,
+                repo_config.check_name,
+                "skipped",
+                message="Hubcast disables sync for draft PRs.",
+            )
+        return
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"

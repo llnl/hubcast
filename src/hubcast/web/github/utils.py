@@ -14,6 +14,8 @@ def create_config(fullname: str, data: Dict) -> RepoConfig:
         fullname=fullname,
         dest_org=data["Repo"]["owner"],
         dest_name=data["Repo"]["name"],
+        draft_sync=data["Repo"].get("draft_sync", True),
+        draft_sync_msg=data["Repo"].get("draft_sync_msg", True),
     )
 
 

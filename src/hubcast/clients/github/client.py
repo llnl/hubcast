@@ -43,23 +43,52 @@ class GitHubClient:
         self.bot_user = bot_user
 
     async def set_check_status(
-        self, ref: str, check_name: str, status: str, details_url: str
+        self,
+        ref: str,
+        check_name: str,
+        status: str,
+        details_url: str = None,
+        message: str = None,
     ):
-        gitlab_netloc = urlparse(details_url).netloc
+        """
+        Set the status of a GitHub check.
 
+        Attributes:
+        ----------
+        ref: str
+            The git SHA reference for the check.
+        check_name: str
+            The name of the check.
+        status: str
+            The status of the check.
+        details_url: str, optional
+            A URL with more details about the check. Required if message is not provided.
+        message: str, optional
+            Used to convey a small message in the check output
+            (for example, to indicate a skipped sync, rather than forwarding pipeline status).
+
+        """
         # construct upload payload
         payload = {
             "name": check_name,
             "head_sha": ref,
-            "details_url": details_url,
-            "output": {
-                "title": "External Pipeline Run",
-                "summary": f"[View this pipeline on {gitlab_netloc}]({details_url})",
-            },
         }
 
+        if message:
+            payload["output"] = {
+                "title": message,
+                "summary": "",  # summary can't be None
+            }
+        else:
+            gitlab_netloc = urlparse(details_url).netloc
+            payload["details_url"] = details_url
+            payload["output"] = {
+                "title": "External Pipeline Run",
+                "summary": f"[View this pipeline on {gitlab_netloc}]({details_url})",
+            }
+
         # for success and failure status write out a conclusion
-        if status in ("success", "failure", "cancelled"):
+        if status in ("skipped", "success", "failure", "cancelled"):
             payload["status"] = "completed"
             payload["conclusion"] = status
         else:
