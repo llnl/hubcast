@@ -64,9 +64,10 @@ async def sync_branch(event, gh, gl, gl_user, *arg, **kwargs):
         "gh_check": repo_config.check_name,
     }
     await gl.set_webhook(dest_fullname, webhook_data)
+    gl_token = await gl.auth.authenticate_installation(gl_user)
 
     # sync commits from GitHub -> GitLab
-    gl_refs = await ls_remote(dest_remote_url)
+    gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     have_shas = set(gl_refs.values())
     from_sha = gl_refs.get(target_ref) or ("0" * 40)
 
@@ -77,10 +78,14 @@ async def sync_branch(event, gh, gl, gl_user, *arg, **kwargs):
         )
         return
 
+    gh_token = await gh.auth.authenticate_installation(gh.repo_owner, gh.repo_name)
+
     packfile = await fetch_pack(
         src_repo_url,
         want_sha,
         have_shas,
+        username=gh.requester,  # the username doesn't matter, but can't be empty
+        password=gh_token,
     )
 
     gl_token = await gl.auth.authenticate_user(gl_user)
@@ -113,8 +118,9 @@ async def remove_branch(event, gh, gl, gl_user, *arg, **kwargs):
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
+    gl_token = await gl.auth.authenticate_installation(gl_user)
 
-    gl_refs = await ls_remote(dest_remote_url)
+    gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     head_sha = gl_refs.get(target_ref)
     null_sha = "0" * 40
 
@@ -137,7 +143,7 @@ async def remove_branch(event, gh, gl, gl_user, *arg, **kwargs):
 # -----------------------------------
 
 
-async def sync_pr(pull_request, gh, gl, gl_user):
+async def sync_pr(pull_request, gh, gl, gl_user, src_repo_private):
     """Sync the git fork/branch referenced in a PR to GitLab.
 
     This isn't technically an event handler, but is used a couple different ways in this file.
@@ -157,6 +163,18 @@ async def sync_pr(pull_request, gh, gl, gl_user):
     else:
         target_ref = f"refs/heads/{pull_request['head']['ref']}"
 
+    if is_pull_request_fork and src_repo_private:
+        # GitHub apps will not have access to private forks
+        log.warning(
+            "Cannot sync pull request from private fork",
+            extra={
+                "repo": src_fullname,
+                "pull_request_id": pull_request_id,
+                "fork_fullname": pull_request["head"]["repo"]["full_name"],
+            },
+        )
+        return
+
     # get the repository configuration from .github/hubcast.yml
     repo_config = await get_repo_config(gh, src_fullname)
     if not repo_config.draft_sync and pull_request["draft"]:
@@ -171,8 +189,9 @@ async def sync_pr(pull_request, gh, gl, gl_user):
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
+    gl_token = await gl.auth.authenticate_installation(gl_user)
 
-    gl_refs = await ls_remote(dest_remote_url)
+    gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     have_shas = set(gl_refs.values())
     from_sha = gl_refs.get(target_ref) or ("0" * 40)
 
@@ -183,11 +202,24 @@ async def sync_pr(pull_request, gh, gl, gl_user):
         )
         return
 
+    if is_pull_request_fork and not src_repo_private:
+        # no auth needed for public forks
+        src_creds = {}
+    else:
+        # authenticate if the PR comes from the target repository
+        src_creds = {
+            "username": gh.requester,  # the username doesn't matter, but can't be empty
+            "password": await gh.auth.authenticate_installation(
+                gh.repo_owner, gh.repo_name
+            ),
+        }
+
     # fetch differential packfile with all new commits
     packfile = await fetch_pack(
         src_repo_url,
         want_sha,
         have_shas,
+        **src_creds,
     )
 
     gl_token = await gl.auth.authenticate_user(gl_user)
@@ -218,7 +250,8 @@ async def sync_pr(pull_request, gh, gl, gl_user):
 async def sync_pr_event(event, gh, gl, gl_user, *arg, **kwargs):
     """Sync the git fork/branch referenced in a PR to GitLab."""
     pull_request = event.data["pull_request"]
-    await sync_pr(pull_request, gh, gl, gl_user)
+    src_repo_private = pull_request["head"]["repo"]["private"]
+    await sync_pr(pull_request, gh, gl, gl_user, src_repo_private)
 
 
 @router.register("pull_request", action="closed")
@@ -243,8 +276,9 @@ async def remove_pr(event, gh, gl, gl_user, *arg, **kwargs):
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
+    gl_token = await gl.auth.authenticate_installation(gl_user)
 
-    gl_refs = await ls_remote(dest_remote_url)
+    gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     head_sha = gl_refs.get(target_ref)
     null_sha = "0" * 40
 
@@ -280,7 +314,8 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
         # this does not handle PR deletions, those will need to be manually cleaned by project maintainers
         pull_request_id = event.data["issue"]["number"]
         pull_request = await gh.get_pr(pull_request_id)
-        await sync_pr(pull_request, gh, gl, gl_user)
+        src_repo_private = pull_request["head"]["repo"]["private"]
+        await sync_pr(pull_request, gh, gl, gl_user, src_repo_private)
 
         # note: the user will see a +1 regardless of whether a sync truly occurred
         plus_one = True
@@ -290,8 +325,9 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
     ):
         pull_request_id = event.data["issue"]["number"]
         pull_request = await gh.get_pr(pull_request_id)
+        src_repo_private = pull_request["head"]["repo"]["private"]
         # sync the PR in case it fell out of sync
-        await sync_pr(pull_request, gh, gl, gl_user)
+        await sync_pr(pull_request, gh, gl, gl_user, src_repo_private)
 
         # get the branch this PR belongs to
         src_fullname = pull_request["head"]["repo"]["full_name"]
