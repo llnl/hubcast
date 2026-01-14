@@ -57,6 +57,7 @@ def main():
             gitlab_url=conf.gl.instance_url,
             access_token=conf.gl_oauth_access_token,
             oauth_provider=conf.gl_oauth_provider,
+            requester=conf.gl.requester,
         )
 
     else:

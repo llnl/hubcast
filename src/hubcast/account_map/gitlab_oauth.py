@@ -19,36 +19,43 @@ class GitlabOauthMap(AccountMap):
 
     Attributes:
     ----------
-    gitlab_url : str
+    gitlab_url: str
         URL of the destination GitLab instance
-    access_token : str
+    access_token: str
         GitLab access token; must be created by an administrator with the `read_api` scope
-    oauth_provider : str
+    oauth_provider: str
         name of the provider used to map accounts,
         see https://docs.gitlab.com/integration/omniauth for options
+    requester: str
+        user-agent string to use for GitLab API requests
     """
 
-    def __init__(self, gitlab_url: str, access_token: str, oauth_provider: str):
+    def __init__(
+        self, gitlab_url: str, access_token: str, oauth_provider: str, requester: str
+    ):
         self.gitlab_url = gitlab_url
         self.access_token = access_token
         self.oauth_provider = oauth_provider
+        self.requester = requester
 
-    async def __call__(self, uid: str) -> Union[str, None]:
+    async def __call__(self, github_user: dict) -> Union[str, None]:
         """
-        Queries list of all GitLab users for a match of uid and oauth_provider.
+        Queries list of all GitLab users for a match of external uid and oauth_provider.
 
         Returns username of the matched GitLab user, None if not found.
         """
-        # TODO does it make sense to use the GitLabClient/GitLabClientFactory for this?
         async with aiohttp.ClientSession() as session:
-            # TODO do we need user= here?
             gl = gidgetlab.aiohttp.GitLabAPI(
-                session, access_token=self.access_token, url=self.gitlab_url
+                session,
+                access_token=self.access_token,
+                url=self.gitlab_url,
+                requester=self.requester,
             )
 
             # https://docs.gitlab.com/api/users/#as-an-administrator
-            url = f"/users?extern_uid={uid}&provider={self.oauth_provider}"
-            users = await gl.getitem(url)
+            users = await gl.getitem(
+                f"/users?extern_uid={github_user['id']}&provider={self.oauth_provider}"
+            )
 
             # technically an iterable, but we don't expect there to be more than one value
             for user in users:

@@ -42,8 +42,8 @@ class FileMap(AccountMap):
         except yaml.YAMLError:
             raise FileMapError(f"Failed to parse file map. path={path}")
 
-    def __call__(self, github_user: str) -> Union[str, None]:
+    async def __call__(self, github_user: dict) -> Union[str, None]:
         """
         Return the gitlab_user for a github_user if one exists.
         """
-        return self.users.get(github_user)
+        return self.users.get(github_user["login"])
