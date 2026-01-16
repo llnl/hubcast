@@ -36,7 +36,7 @@ class GitHubConfig:
         self.privkey = env_get("HC_GH_PRIVATE_KEY")
         self.requester = env_get("HC_GH_REQUESTER")
         self.webhook_secret = env_get("HC_GH_SECRET")
-        self.bot_user = env_get("HC_GH_BOT_USER")
+        self.bot_user = os.environ.get("HC_GH_BOT_USER")  # optional
 
 
 class GitLabConfig:

@@ -306,10 +306,15 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
     response = None
     plus_one = False
 
-    if re.search(f"@{gh.bot_user} help", comment, re.IGNORECASE):
-        response = comments.help_message(gh.bot_user)
+    if not gh.bot_user:
+        bot_caller = "/hubcast"
+    else:
+        bot_caller = f"@{gh.bot_user}"
 
-    elif re.search(f"@{gh.bot_user} approve", comment, re.IGNORECASE):
+    if re.search(f"{bot_caller} help", comment, re.IGNORECASE):
+        response = comments.help_message(bot_caller)
+
+    elif re.search(f"{bot_caller} approve", comment, re.IGNORECASE):
         # syncs PR changes to the destination on behalf of the commenter
         # this does not handle PR deletions, those will need to be manually cleaned by project maintainers
         pull_request_id = event.data["issue"]["number"]
@@ -321,7 +326,7 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
         plus_one = True
 
     elif re.search(
-        f"@{gh.bot_user} (re[-]?)?(run|start) pipeline", comment, re.IGNORECASE
+        f"{bot_caller} (re[-]?)?(run|start) pipeline", comment, re.IGNORECASE
     ):
         pull_request_id = event.data["issue"]["number"]
         pull_request = await gh.get_pr(pull_request_id)
@@ -352,7 +357,7 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
             response = "I had a problem starting the pipeline."
 
     elif re.search(
-        f"@{gh.bot_user} restart failed(?:[- ]?jobs)?", comment, re.IGNORECASE
+        f"{bot_caller} restart failed(?:[- ]?jobs)?", comment, re.IGNORECASE
     ):
         pull_request_id = event.data["issue"]["number"]
         pull_request = await gh.get_pr(pull_request_id)
