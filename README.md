@@ -13,9 +13,11 @@
 
 </div>
 
+## Features
+
 Hubcast is a secure, event-driven synchronization application for bridging Git forges. It automates various workflow tasks and handles jobs like:
 
-- Syncing branches from GitHub to GitLab.
+- Syncing branches between Git forges (e.g., GitHub -> GitLab)
 - Reporting CI job statuses back to GitHub from GitLab Pipeline Runs.
 
 ## License
