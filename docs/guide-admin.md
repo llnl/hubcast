@@ -46,7 +46,7 @@ With Hubcast fully configured, all repositories that have this app installed wil
 
 ## GitLab as a destination forge
 
-Hubcast currently supports any GitLab instance as the destination forge. In order to perform actions such as writing to the repository, syncing CI status, and configuring webhooks, Hubcast will need access to certain permissions.
+Hubcast supports mirroring to any GitLab instance as the destination forge. In order to perform actions such as writing to the repository, syncing CI status, and configuring webhooks, Hubcast will need access to certain permissions.
 
 Hubcast supports two permissions models, serving different use-cases. If you are able to obtain admin access to the GitLab destination forge, we recommend the **impersonation token** strategy. In other cases (such as syncing to GitLab.com), a service account with sufficient permissions will work.
 
