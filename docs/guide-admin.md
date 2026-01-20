@@ -27,7 +27,7 @@ If you're working in a development environment, we recommend using [smee.io](htt
 
 Create a strong, password-like string for the webhook secret. Hubcast will use this to verify webhooks came from GitHub.
 
-With the webhook URL and secret, follow [GitHub's app registration guide](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app).
+With the webhook URL and secret, follow [GitHub's app registration guide](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app) with the following settings.
 
 The app will require the following permissions:
 - repo contents: read
