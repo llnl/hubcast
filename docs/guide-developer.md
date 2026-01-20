@@ -17,9 +17,7 @@ $ git clone -c feature.manyFiles=true https://github.com/spack/spack.git
 $ cd spack/
 ```
 
-Next we'll need to load Spack into our shell. (Add one of the following lines
--- prepended by the directory you cloned spack into -- to your
-`.zshrc`, `.bashrc`, or equivalent to make it permanent.)
+Next we'll need to load Spack into our shell. (Add one of the following lines -- prepended by the directory you cloned spack into -- to your `.zshrc`, `.bashrc`, or equivalent to make it permanent.)
 
 ```bash
 # For bash/zsh/sh
@@ -41,12 +39,11 @@ $ spack env activate -d .
 
 > [!TIP]
 > If you have [direnv](https://direnv.net) installed on your system
-> you can run `direnv allow` to automatically load the spack environment
+> you can run `direnv allow` to automatically load the Spack environment
 > when you cd into the repository in the future.
 
 ### Installing
-Install Hubcast's development dependencies with Spack by running
-the following:
+Install Hubcast's development dependencies with Spack by running the following:
 
 ```bash
 $ spack install
@@ -63,16 +60,18 @@ $ spack install
 
 To test your development version of Hubcast on a real-world GitHub -> GitLab syncing example, we recommend using [smee.io](https://smee.io) to forward webhooks.
 
-For example, go to [smee.io](https://smee.io), start a new channel, and from the command line forward a local Hubcast endpoint to the new channel. Note that you will need to set up two channels: one for the source webhook handler and another for the destination handler.
+For example, go to [smee.io](https://smee.io), start a new channel, and from the command line forward a local Hubcast endpoint to the new channel. 
+Note that you will need to set up two channels: one for the source webhook handler and another for the destination handler.
 
 ```
 smee -u https://smee.io/HASH -t http://localhost:8080/v1/events/src/github
 ```
 
-## TODO Account Maps
+## Development Tasks
 
-talk about how to write one..
-https://github.com/LLNL/hubcast/issues/41
+### Account Maps
+Account maps are used by Hubcast to link user accounts between Git forges. Hubcast ships with implementations like a YAML file mapper, with plans to include LDAP and GitHub OAuth mappers.
 
+To write your own account mapper, see the abstract base class in [`src/hubcast/account_map/abc.py`](/src/hubcast/account_map/abc.py) and current implementations in the `account_map` directory.
 
-TODO add a link to the development guide explainingg how to do this...backlinks to the admin guide
+The basic idea is to define an input (a file, metadata from a webhook) where the initiating user is identified, along a way to link that user's identity to an account on the destination forge.
