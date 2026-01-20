@@ -24,6 +24,8 @@ Four core functions:
 3. Synchronizing repository state to the destination forge.
 4. Reporting CI results back to the source forge.
 
+See [ARCHITECTURE.md](/docs/ARCHITECTURE.md) for more details.
+
 ## What Hubcast does not do
 
 The scope is intentionally limited to support flexible and secure deployment:
