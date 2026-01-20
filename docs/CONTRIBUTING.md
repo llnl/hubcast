@@ -19,7 +19,7 @@ install the required dependencies and Node.js to install the
 You can install the full development environment using [Spack](/docs/guide-developer.md#development-environment).
 
 ## Development
-After cloning the Hubcast repository, we recommend reading through the [documentation](/docs/home.md) and each guide ([admin](/docs/guide-admin.md), [user](/docs/guide-user.md), [developer](/docs/guide-developer.md)) to understand how to use Hubcast and set up your local environment.
+After cloning the Hubcast repository, we recommend reading through the [documentation](/docs/readme.md) and each guide ([admin](/docs/guide-admin.md), [user](/docs/guide-user.md), [developer](/docs/guide-developer.md)) to understand how to use Hubcast and set up your local environment.
 
 > [!TIP]
 > If you're developing locally you can use [smee.io](https://smee.io) to relay

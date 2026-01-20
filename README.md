@@ -7,7 +7,7 @@
 **[Features] &nbsp; • &nbsp; [Documentation] &nbsp; • &nbsp; [Contributing] &nbsp; • &nbsp; [Changelog]**
 
 [Features]: #features
-[Documentation]: /docs/home.md
+[Documentation]: /docs/readme.md
 [Contributing]: /docs/CONTRIBUTING.md
 [Changelog]: https://github.com/LLNL/hubcast/releases
 
