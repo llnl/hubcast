@@ -56,11 +56,9 @@ With the GitHub App configured, all repositories that install this app will noti
 
 ## GitLab as a destination forge
 
-Hubcast supports mirroring to any GitLab instance as the destination forge. In order to perform actions such as writing to the repository, syncing CI status, and configuring webhooks, Hubcast will need access to certain permissions.
+Hubcast supports mirroring to any GitLab instance as the destination forge. In order to perform actions such as writing to the repository, syncing CI status, and configuring webhooks, Hubcast will need access to certain permissions. Administrator access to the GitLab destination forge is required.
 
-Hubcast supports two permissions models, serving different use-cases. If you are able to obtain admin access to the GitLab destination forge, we recommend the **impersonation token** strategy. In other cases (such as syncing to GitLab.com), a service account with sufficient permissions will work.
-
-1. [Impersonation tokens](https://docs.gitlab.com/api/rest/authentication/#impersonation-tokens): GitLab supports the creation of these tokens to downscope actions to a certain user account. 
+[Impersonation tokens](https://docs.gitlab.com/api/rest/authentication/#impersonation-tokens): GitLab supports the creation of these tokens to downscope actions to a certain user account. 
 
 For instance, GitHub user `test123` submits a pull request to a test repository. Hubcast's account mapper resolves the user on the destination GitLab forge. Hubcast will then create an impersonation token for that user, sync the changes in the PR to the destination, and forward any CI job status back to Hubcast for processing.
 
@@ -68,17 +66,11 @@ Any permissions or roles held by the user on the destination will define the pos
 
 To enable this functionality, an administrator on the GitLab forge creates a [personal access token](https://docs.gitlab.com/user/profile/personal_access_tokens/) with the `api` scope.
 
-2. Service account: without admin access to the destination forge, a service account is the only way to ensure consistent access to multiple repositories.
-
-Create a new account on the destination and generate a personal access token with the `api`, `read_repository`, and `write_repository` scopes. When adding this account to repositories and groups, ensure that the user has the `Maintainer` role (needed to manage webhooks).
-
-Be aware that the service account will have complete access to the repositories it is added to. This means that any user in the account map will be trusted by Hubcast to perform changes to the repositories. This can be mitigated by strictly limiting the members in the account map or managing a Hubcast instance (and service account) for each logical repository scope.
-
 ## Account maps
 
 Hubcast comes with account mappers by default. When a user on the source forge performs an action, Hubcast will perform a lookup of the user.
 
-If the account map returns the user's identifier on the destination forge, Hubcast will continue with the requested action. Depending on the chosen [permissions model](#gitlab-as-a-destination-forge) for the destination forge, the user's identity will be impersonated by Hubcast, or a service account will be used to complete the request.
+If the account map returns the user's identifier on the destination forge, Hubcast will continue with the requested action.
 
 If the user is not present in the account map, Hubcast won't perform the action. As documented in the user guide, users with sufficient permissions can act as an "approver" and ensure that Hubcast fulfills the request.
 
