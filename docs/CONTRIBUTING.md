@@ -1,7 +1,5 @@
 # Contributing
 
-# TODO point to the developer guide
-
 ## Introduction
 Hubcast welcomes contributions via [Pull Requests](https://github.com/LLNL/hubcast/pulls).
 We've labeled beginner friendly (good first issue) tasks in the issue tracker. Feel free
@@ -18,11 +16,10 @@ Hubcast is written in Python. You'll need a version of Python and pip to
 install the required dependencies and Node.js to install the
 [smee-client](https://www.npmjs.com/package/smee-client) to test the application locally.
 
-You can install the full development environment using [Spack](/docs/guide-developer.md).
+You can install the full development environment using [Spack](/docs/guide-developer.md#development-environment).
 
 ## Development
-After cloning the repository, you'll need to follow the [Developer Guide](/docs/guide-developer.md)
-to set up your local environment.
+After cloning the Hubcast repository, we recommend reading through the [documentation](/docs/home.md) and each guide ([admin](/docs/guide-admin.md), [user](/docs/guide-user.md), [developer](/docs/guide-developer.md)) to understand how to use Hubcast and set up your local environment.
 
 > [!TIP]
 > If you're developing locally you can use [smee.io](https://smee.io) to relay
@@ -40,15 +37,17 @@ to set up your local environment.
 ├── LICENSE
 ├── README.md
 ├── docs # ---------> project documentation
-├── src # ----------> python application
+├── src # ----------> Python application
+├── spack # --------> Spack package files
 ├── pyproject.toml
-└── spack.yaml -----> spack development environment
+└── spack.yaml # ---> Spack development environment
 ```
 ```bash
 src/hubcast
-├── __main__.py # --> hubcast entrypoint and config setup
-├── config.py # ----> hubcast config manager
-├── account_map # --> user mapping between git forges
+├── __main__.py # --> Hubcast entrypoint and config setup
+├── config.py # ----> Hubcast config manager
+├── logging.py # ---> Hubcast logging config
+├── account_map # --> User mapping between Git forges
 ├── clients # ------> GitHub & GitLab auth and API clients
 ├── repos # --------> Hubcast-managed Git repo config
 ├── web # ----------> GitHub & GitLab event routing logic
