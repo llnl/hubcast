@@ -23,9 +23,19 @@ We'll first configure the source and destination forges to emit events triggered
 Hubcast uses the [GitHub App](https://docs.github.com/en/apps/using-github-apps/about-using-github-apps) feature to monitor repositories for changes and respond to events. To create an app, we'll need a webhook URL and webhook secret.
 
 If you're deploying Hubcast in production, the webhook will be a link to your Hubcast instance (e.g., `https://hubcast.example.com/v1/events/src/github`).
-If you're working in a development environment, we recommend using [smee.io](https://smee.io) to forward webhooks to your local machine. 
 
-Create a strong, password-like string for the webhook secret. Hubcast will use this to verify webhooks came from GitHub.
+> [!NOTE]
+> If you're working in a development environment, check out our [developer documentation](docs/guide-developer.md).
+
+Create a strong, password-like string for the webhook secret. 
+
+You can do this quickly with OpenSSL:
+
+```sh
+openssl rand -base64 25 | tr -d "="
+```
+
+Hubcast will use this to verify webhooks came from GitHub.
 
 With the webhook URL and secret, follow [GitHub's app registration guide](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app) with the following settings.
 
@@ -40,9 +50,9 @@ With the webhook URL and secret, follow [GitHub's app registration guide](https:
 
 The registration flow will ask [where the app can be installed](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/making-a-github-app-public-or-private). We recommend keeping the app private, as making the app publicly installable may result in external actors attempting to mirror their repositories to your configured destination forge. A private app can be configured to be owned by a GitHub organization, allowing it to be installed by any repository in that namespace.
 
-Once your app is created, go to `Private Keys` -> `Generate a private key`, which will download a file with the `*.pem` extension.
+Once your app is created, go to `Private Keys` -> `Generate a private key`, which will download a file with the `*.pem` extension. Save this file, we'll use it later when configuring the Hubcast instance.
 
-With Hubcast fully configured, all repositories that have this app installed will have their state synced to the destination forge.
+With the GitHub App configured, all repositories that install this app will notify the Hubcast instance of any state change that requires a sync.
 
 ## GitLab as a destination forge
 
