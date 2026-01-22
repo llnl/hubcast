@@ -134,7 +134,6 @@ def mock_gh():
     gh.get_branch = AsyncMock(return_value={"commit": {"sha": "default-sha"}})
     gh.set_check_status = AsyncMock()
     gh.bot_user = "hubcast-bot"
-    gh.get_pr = AsyncMock()
     gh.post_comment = AsyncMock()
     gh.react_to_comment = AsyncMock()
     gh.auth.authenticate_installation = AsyncMock(return_value="gh-token-123")
@@ -145,24 +144,7 @@ def mock_gh():
 def mock_gl():
     """Mocked GitLab client"""
     gl = AsyncMock()
-    gl.instance_url = "https://gitlab.example.com"
-    gl.set_webhook = AsyncMock()
-    gl.run_pipeline = AsyncMock()
-    gl.get_latest_pipeline = AsyncMock()
-    gl.retry_pipeline_jobs = AsyncMock()
-    # TODO installations are erroneously included rn, remove when fixed
-    gl.auth.authenticate_installation = AsyncMock(return_value="gl-install-token")
-    gl.auth.authenticate_user = AsyncMock(return_value="gl-user-token")
     return gl
-
-
-# @pytest.fixture
-# def mock_repo_config():
-#     """Mocked repo config"""
-#     config = Mock()
-#     # config.dest_org = "owner"
-#     # config.dest_name = "repo"
-#     return config
 
 
 @pytest.fixture
