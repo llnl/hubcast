@@ -1,8 +1,9 @@
 import logging
 from typing import Dict
 
+import yaml
+
 from hubcast.clients.github import GitHubClient
-from hubcast.clients.github.client import InvalidConfigYAMLError
 from hubcast.repos.config import RepoConfig
 
 config_cache = dict()
@@ -23,12 +24,24 @@ async def get_repo_config(gh: GitHubClient, fullname: str, refresh: bool = False
     if fullname in config_cache and not refresh:
         config = config_cache[fullname]
     else:
-        try:
-            data = await gh.get_repo_config()
-        except InvalidConfigYAMLError:
-            log.exception("Repo config parse failed")
+        config_str = await gh.get_repo_config()
 
-        config = create_config(fullname, data)
+        try:
+            config_yaml = yaml.safe_load(config_str)
+        except yaml.YAMLError:
+            log.info(
+                "Repo config is invalid YAML",
+                extra={"repo_owner": gh.repo_owner, "repo_name": gh.repo_name},
+            )
+
+        try:
+            config = create_config(fullname, config_yaml)
+        except KeyError as exc:
+            log.info(
+                f"Repo config is missing required fields: {exc}",
+                extra={"repo_owner": gh.repo_owner, "repo_name": gh.repo_name},
+            )
+
         config_cache[fullname] = config
 
     return config

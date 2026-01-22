@@ -1,7 +1,6 @@
 from urllib.parse import urlparse
 
 import aiohttp
-import yaml
 from gidgethub import aiohttp as gh_aiohttp
 
 from .auth import GitHubAuthenticator
@@ -16,10 +15,6 @@ VALID_GH_REACTIONS = [
     "rocket",
     "eyes",
 ]
-
-
-class InvalidConfigYAMLError(Exception):
-    pass
 
 
 class GitHubClientFactory:
@@ -132,16 +127,7 @@ class GitHubClient:
             # get the contents of the repository hubcast.yml file
             url = f"/repos/{self.repo_owner}/{self.repo_name}/contents/.github/hubcast.yml"
             # get raw contents rather than base64 encoded text
-            config_str = await gh.getitem(url, accept="application/vnd.github.raw")
-
-            try:
-                config = yaml.safe_load(config_str)
-            except yaml.YAMLError:
-                raise InvalidConfigYAMLError(
-                    f"Failed to parse repo config. repo_owner={self.repo_owner} repo_name={self.repo_name}"
-                )
-
-            return config
+            return await gh.getitem(url, accept="application/vnd.github.raw")
 
     async def get_pr(self, id):
         """Return individual PR data."""
