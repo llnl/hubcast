@@ -104,6 +104,8 @@ async def pipeline_status_relay(
         details_url=pipeline_url,
     )
 
+    return status
+
 
 @router.register("Job Hook")
 async def job_status_relay(
@@ -156,3 +158,5 @@ async def job_status_relay(
         summary=f"[View this job on {urlparse(job_url).netloc}]({job_url})",
         details_url=job_url,
     )
+
+    return status
