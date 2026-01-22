@@ -85,6 +85,14 @@ Users:
   source_username: destination_username
 ```
 
+### LDAP mapper
+
+If your organization hosts an LDAP server with information about user accounts, you can use attributes to manage mappings. For example, your organization may manage a GitLab instance where you want to run CI jobs. The LDAP server could store the user's account ID on the destination forge (the GitLab instance) and their username on the source forge (e.g., GitHub.com).
+
+When an internal user submits a PR to a GitHub repo, the account map will find the corresponding account on the destination forge and process the sync.
+
+It is up to your organization how to propagate the source forge identities; the LDAP server will need an attribute like `githubId` to perform the mapping.
+
 ## Configuration
 
 Hubcast is configured via environment variables. The full set of current options are documented below.
@@ -98,11 +106,23 @@ Hubcast is configured via environment variables. The full set of current options
 
 For details on how to configure each option, see the [account map](#account-maps) documentation.
 
-- `HC_ACCOUNT_MAP_TYPE`: options: `file`
+- `HC_ACCOUNT_MAP_TYPE`: options: `file`, `ldap`
 
 If using the `file` map:
 
 - `HC_ACCOUNT_MAP_PATH`: a path to the YAML file mapping usernames between source and destination forges
+
+If using the `ldap` map:
+
+- `HC_LDAP_MAP_URI`: the URI of the LDAP instance (e.g., ``)
+- `HC_LDAP_MAP_BASE`: the base of the LDAP instance (e.g., ``)
+- `HC_LDAP_MAP_INPUT`: the user's source forge user id (e.g. `githubId`)
+- `HC_LDAP_MAP_OUTPUT`: the user's destination forge user id (e.g., `uid`)
+- `HC_LDAP_MAP_SCOPE`: the [scope of the LDAP search](https://ldap.com/the-ldap-search-operation), specified numerically. options: base (0), one (1), and sub (2).
+- `HC_LDAP_MAP_BIND_DN`: the name of the bind distinguished name (optional)
+- `HC_LDAP_MAP_BIND_PASSWORD`: the bind password (optional)
+
+If no bind credentials are specified, the mapper will attempt a SASL/GSSAPI (e.g., Kerberos) bind.
 
 ### Source forge settings
 
