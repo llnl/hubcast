@@ -11,8 +11,20 @@ class Config:
         self.port = int(env_get("HC_PORT", default="8080"))
 
         self.account_map_type = env_get("HC_ACCOUNT_MAP_TYPE")
-        self.account_map_path = env_get("HC_ACCOUNT_MAP_PATH")
+
         self.logging_config_path = env_get("HC_LOGGING_CONFIG_PATH")
+
+        if self.account_map_type == "file":
+            self.account_map_path = env_get("HC_ACCOUNT_MAP_PATH")
+        elif self.account_map_type == "ldap":
+            self.ldap_map_uri = env_get("HC_LDAP_MAP_URI")
+            self.ldap_map_base = env_get("HC_LDAP_MAP_BASE")
+            self.ldap_map_input = env_get("HC_LDAP_MAP_INPUT")
+            self.ldap_map_output = env_get("HC_LDAP_MAP_OUTPUT")
+            self.ldap_map_scope = env_get("HC_LDAP_MAP_SCOPE")
+            # optional settings: if None, the mapper will behave accordingly
+            self.ldap_map_bind_dn = os.environ.get("HC_LDAP_MAP_BIND_DN")
+            self.ldap_map_bind_password = os.environ.get("HC_LDAP_MAP_BIND_PASSWORD")
 
         self.gh = GitHubConfig()
         self.gl = GitLabConfig()

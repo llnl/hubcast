@@ -13,6 +13,7 @@ dependencies = [
     "gidgetlab",
     "repligit[aiohttp]",
     "pyyaml",
+    "python-ldap"
 ]
 authors = [
     { name = "Alec Scott" },

@@ -7,7 +7,8 @@ import sys
 from aiohttp import web
 from aiojobs.aiohttp import setup
 
-from hubcast.account_map.file import FileMap, FileMapError
+from hubcast.account_map import FileMap, LDAPMap
+from hubcast.account_map.file import FileMapError
 from hubcast.clients.github import GitHubClientFactory
 from hubcast.clients.gitlab import GitLabClientFactory
 from hubcast.config import Config, ConfigError
@@ -51,6 +52,16 @@ def main():
         except FileMapError:
             log.exception("Error initializing file account map")
             sys.exit(1)
+    elif conf.account_map_type == "ldap":
+        account_map = LDAPMap(
+            conf.ldap_map_uri,
+            conf.ldap_map_base,
+            conf.ldap_map_input,
+            conf.ldap_map_output,
+            conf.ldap_map_scope,
+            conf.ldap_map_bind_dn,
+            conf.ldap_map_bind_password,
+        )
     else:
         log.error(
             "Unknown account map type",

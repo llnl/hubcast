@@ -29,3 +29,4 @@ class PyHubcast(PythonPackage):
     depends_on("py-gidgetlab+aiohttp", type=("build", "run"))
     depends_on("py-repligit", type=("build", "run"))
     depends_on("py-pyyaml", type=("build", "run"))
+    depends_on("py-python-ldap", type=("build", "run"))
