@@ -6,6 +6,11 @@ from gidgethub import aiohttp as gh_aiohttp
 
 from .auth import GitHubAuthenticator
 
+# `requester` does not perform any function other than identifying the client
+# in user-agent headers
+GH_REQUESTER = "hubcast"
+
+
 VALID_GH_REACTIONS = [
     "+1",
     "-1",
@@ -23,9 +28,9 @@ class InvalidConfigYAMLError(Exception):
 
 
 class GitHubClientFactory:
-    def __init__(self, app_id, privkey, requester, bot_user):
-        self.requester = requester
-        self.auth = GitHubAuthenticator(requester, privkey, app_id)
+    def __init__(self, app_id, privkey, bot_user):
+        self.requester = GH_REQUESTER
+        self.auth = GitHubAuthenticator(self.requester, privkey, app_id)
         self.bot_user = bot_user
 
     def create_client(self, repo_owner, repo_name):

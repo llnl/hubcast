@@ -6,23 +6,26 @@ import gidgetlab.aiohttp
 
 from .auth import GitLabAuthenticator, GitLabSingleUserAuthenticator
 
+# `requester` does not perform any function other than identifying the client
+# in user-agent headers
+GL_REQUESTER = "hubcast"
+
 
 class GitLabClientFactory:
     def __init__(
         self,
         instance_url: str,
-        requester: str,
         token: str,
         callback_url: str,
         webhook_secret: str,
         token_type: str = "impersonation",  # nosec B107
     ):
-        self.requester = requester
+        self.requester = GL_REQUESTER
 
         if token_type == "single":  # nosec B105
             self.auth = GitLabSingleUserAuthenticator(token)
         elif token_type == "impersonation":  # nosec B105
-            self.auth = GitLabAuthenticator(instance_url, requester, token)
+            self.auth = GitLabAuthenticator(instance_url, self.requester, token)
         else:
             raise ValueError(f"Unknown GitLab token type: {token_type}")
 
@@ -34,6 +37,7 @@ class GitLabClientFactory:
         """creates a GitLabClient for a specific user"""
         return GitLabClient(
             self.auth,
+            self.requester,
             self.instance_url,
             self.callback_url,
             self.webhook_secret,
@@ -45,12 +49,14 @@ class GitLabClient:
     def __init__(
         self,
         auth: GitLabAuthenticator,
+        requester: str,
         instance_url: str,
         callback_url: str,
         webhook_secret: str,
         user: str,
     ):
         self.auth = auth
+        self.requester = requester
         self.instance_url = instance_url
         self.callback_url = callback_url
         self.webhook_secret = webhook_secret
@@ -117,7 +123,7 @@ class GitLabClient:
         async with aiohttp.ClientSession() as session:
             gl = gidgetlab.aiohttp.GitLabAPI(
                 session,
-                requester=self.user,
+                requester=self.requester,
                 access_token=gl_token,
                 url=self.instance_url,
             )
@@ -141,7 +147,7 @@ class GitLabClient:
         async with aiohttp.ClientSession() as session:
             gl = gidgetlab.aiohttp.GitLabAPI(
                 session,
-                requester=self.user,
+                requester=self.requester,
                 access_token=gl_token,
                 url=self.instance_url,
             )
@@ -164,7 +170,7 @@ class GitLabClient:
         async with aiohttp.ClientSession() as session:
             gl = gidgetlab.aiohttp.GitLabAPI(
                 session,
-                requester=self.user,
+                requester=self.requester,
                 access_token=gl_token,
                 url=self.instance_url,
             )
