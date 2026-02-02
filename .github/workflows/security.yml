@@ -10,7 +10,7 @@ jobs:
   bandit-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       # https://bandit.readthedocs.io/en/latest/faq.html#under-which-version-of-python-should-i-install-bandit
       - name: Set up Python 3.10
@@ -43,7 +43,7 @@ jobs:
         language: [actions, python]
     steps:
     - name: Checkout repository
-      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
     - name: Initialize CodeQL
       uses: github/codeql-action/init@6bc82e05fd0ea64601dd4b465378bbcf57de0314
