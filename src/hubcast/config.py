@@ -1,5 +1,4 @@
 import os
-from typing import Optional
 
 
 class ConfigError(Exception):
@@ -23,8 +22,10 @@ class Config:
             self.ldap_map_output = env_get("HC_LDAP_MAP_OUTPUT")
             self.ldap_map_scope = env_get("HC_LDAP_MAP_SCOPE")
             # optional settings: if None, the mapper will behave accordingly
-            self.ldap_map_bind_dn = os.environ.get("HC_LDAP_MAP_BIND_DN")
-            self.ldap_map_bind_password = os.environ.get("HC_LDAP_MAP_BIND_PASSWORD")
+            self.ldap_map_bind_dn = env_get("HC_LDAP_MAP_BIND_DN", optional=True)
+            self.ldap_map_bind_password = env_get(
+                "HC_LDAP_MAP_BIND_PASSWORD", optional=True
+            )
 
         self.gh = GitHubConfig()
         self.gl = GitLabConfig()
@@ -36,7 +37,7 @@ class GitHubConfig:
         self.privkey = env_get("HC_GH_PRIVATE_KEY")
         self.requester = env_get("HC_GH_REQUESTER")
         self.webhook_secret = env_get("HC_GH_SECRET")
-        self.bot_user = os.environ.get("HC_GH_BOT_USER")  # optional
+        self.bot_user = env_get("HC_GH_BOT_USER", optional=True)
 
 
 class GitLabConfig:
@@ -51,9 +52,24 @@ class GitLabConfig:
         self.callback_url = env_get("HC_GL_CALLBACK_URL")
 
 
-def env_get(key: str, default: Optional[str] = None) -> str:
-    value = os.environ.get(key) or default
-    if not value:
-        raise ConfigError(f"Required environment variable not found: {key}")
+def env_get(key: str, default=None, optional: bool = False):
+    """
+    Retrieve environment variables.
 
-    return value
+    Attributes:
+    ----------
+    key: str
+        The environment variable key to retrieve.
+    default: any, optional
+        The default value to return if the environment variable is not set.
+    optional: bool, optional
+        If True, the default value is returned when the variable is not found. If False
+        and the variable is not found, a ConfigError is raised.
+    """
+
+    try:
+        return os.environ[key]
+    except KeyError:
+        if optional:
+            return default
+        raise ConfigError(f"Required environment variable not found: {key}")
