@@ -27,7 +27,7 @@ jobs:
         # https://docs.github.com/en/actions/reference/runners/github-hosted-runners#administrative-privileges
         # sudo apt-get update
         run: |
-          sudo apt-get -y build-essential ldap-utils libldap2-dev libsasl2-dev
+          sudo apt-get install -y build-essential ldap-utils libldap2-dev libsasl2-dev
 
       - name: Install Python dependencies
         run: |
