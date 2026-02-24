@@ -306,10 +306,10 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
     response = None
     plus_one = False
 
-    if not gh.bot_user:
-        bot_caller = "/hubcast"
-    else:
+    if gh.bot_user:
         bot_caller = f"@{gh.bot_user}"
+    else:
+        bot_caller = "/hubcast"
 
     if re.search(f"{bot_caller} help", comment, re.IGNORECASE):
         response = comments.help_message(bot_caller)
