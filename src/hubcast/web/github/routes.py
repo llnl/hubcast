@@ -139,7 +139,7 @@ async def remove_branch(event, gh, gl, gl_user, *arg, **kwargs):
 # -----------------------------------
 
 
-async def sync_pr(pull_request, gh, gl, gl_user, src_repo_private):
+async def sync_pr(pull_request, gh, gl, gl_user, src_repo_private, commit_sha=None):
     """Sync the git fork/branch referenced in a PR to GitLab.
 
     This isn't technically an event handler, but is used a couple different ways in this file.
@@ -149,7 +149,9 @@ async def sync_pr(pull_request, gh, gl, gl_user, src_repo_private):
     src_repo_url = pull_request["head"]["repo"]["clone_url"]
     src_fullname = pull_request["head"]["repo"]["full_name"]
     base_fullname = pull_request["base"]["repo"]["full_name"]
-    want_sha = pull_request["head"]["sha"]
+    # if commit_sha is provided, use that as the want_sha instead of the head sha of the PR
+    # this is used in the context of sync approvals, where a maintainer explicitly approves the sync of a specific commit
+    want_sha = commit_sha or pull_request["head"]["sha"]
 
     # pull requests coming from forks are pushed as branches in the form of
     # pr-<pr-number> instead of as their branch name as conflicts could occur
@@ -290,6 +292,26 @@ async def remove_pr(event, gh, gl, gl_user, *arg, **kwargs):
     )
 
 
+@router.register("pull_request_review", action="submitted")
+async def respond_pr_comment(event, gh, gl, gl_user, *arg, **kwargs):
+    comment = event.data["review"]["body"]
+    if gh.bot_user:
+        bot_caller = f"@{gh.bot_user}"
+    else:
+        bot_caller = "/hubcast"
+    if re.search(f"{bot_caller} approve", comment, re.IGNORECASE):
+        # sync PR changes to the destination on behalf of the commenter
+        # does not handle PR deletions, those will need to be manually cleaned by project maintainers
+
+        # approvals must be tied to specific commit hashes to avoid unintended syncing of malicious commits
+        commit_sha = event.data["review"]["commit_id"]
+        pull_request = event.data["pull_request"]
+        src_repo_private = pull_request["head"]["repo"]["private"]
+        # sync the approved commit
+        await sync_pr(pull_request, gh, gl, gl_user, src_repo_private, commit_sha)
+        # we cannot react to PR reviews like we can with issue/PR comments
+
+
 @router.register("issue_comment", action="created")
 async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
     # differentiate issue vs PR comment
@@ -322,12 +344,10 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
     elif re.search(
         f"{bot_caller} (re[-]?)?(run|start) pipeline", comment, re.IGNORECASE
     ):
+        # allows a project maintainer to restart the pipeline for a PR; should be used for issues unrelated for code changes
+        # this process will not sync changes, as an external collaborator could submit malicious changes and trigger a sync without explicit approval on the commit hash (see `respond_pr_comment`)
         pull_request_id = event.data["issue"]["number"]
         pull_request = await gh.get_pr(pull_request_id)
-        src_repo_private = pull_request["head"]["repo"]["private"]
-        # sync the PR in case it fell out of sync
-        await sync_pr(pull_request, gh, gl, gl_user, src_repo_private)
-
         # get the branch this PR belongs to
         src_fullname = pull_request["head"]["repo"]["full_name"]
         base_fullname = pull_request["base"]["repo"]["full_name"]
