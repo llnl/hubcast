@@ -88,8 +88,6 @@ async def sync_branch(event, gh, gl, gl_user, *arg, **kwargs):
         password=gh_token,
     )
 
-    gl_token = await gl.auth.authenticate_user(gl_user)
-
     log.info(
         "Mirroring refs",
         extra={
@@ -118,13 +116,11 @@ async def remove_branch(event, gh, gl, gl_user, *arg, **kwargs):
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
-    gl_token = await gl.auth.authenticate_installation(gl_user)
+    gl_token = await gl.auth.authenticate_user(gl_user)
 
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     head_sha = gl_refs.get(target_ref)
     null_sha = "0" * 40
-
-    gl_token = await gl.auth.authenticate_user(gl_user)
 
     log.info("Deleting ref", extra={"repo": src_fullname, "target_ref": target_ref})
     await send_pack(
@@ -189,7 +185,7 @@ async def sync_pr(pull_request, gh, gl, gl_user, src_repo_private):
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
-    gl_token = await gl.auth.authenticate_installation(gl_user)
+    gl_token = await gl.auth.authenticate_user(gl_user)
 
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     have_shas = set(gl_refs.values())
@@ -221,8 +217,6 @@ async def sync_pr(pull_request, gh, gl, gl_user, src_repo_private):
         have_shas,
         **src_creds,
     )
-
-    gl_token = await gl.auth.authenticate_user(gl_user)
 
     # upload packfile to gitlab repository
     log.info(
@@ -276,13 +270,11 @@ async def remove_pr(event, gh, gl, gl_user, *arg, **kwargs):
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
-    gl_token = await gl.auth.authenticate_installation(gl_user)
+    gl_token = await gl.auth.authenticate_user(gl_user)
 
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     head_sha = gl_refs.get(target_ref)
     null_sha = "0" * 40
-
-    gl_token = await gl.auth.authenticate_user(gl_user)
 
     log.info("Deleting ref", extra={"repo": src_fullname, "target_ref": target_ref})
     await send_pack(
