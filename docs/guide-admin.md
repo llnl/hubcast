@@ -46,7 +46,11 @@ With the webhook URL and secret, follow [GitHub's app registration guide](https:
 > - checks: read and write (to post CI status from the destination forge)
 > - issues: read (to read PR comments)
 >
-> Subscribe to the `push`, `pull request`, and `issue comments` events.
+> Subscribe to these events:
+> - Issue comment
+> - Pull request
+> - Push
+> - Pull request review
 
 The registration flow will ask [where the app can be installed](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/making-a-github-app-public-or-private). We recommend keeping the app private, as making the app publicly installable may result in external actors attempting to mirror their repositories to your configured destination forge. A private app can be configured to be owned by a GitHub organization, allowing it to be installed by any repository in that namespace.
 
