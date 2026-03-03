@@ -45,7 +45,8 @@ async def sync_branch(event, gh, gl, gl_user, *arg, **kwargs):
     src_repo_url = event.data["repository"]["clone_url"]
     src_fullname = event.data["repository"]["full_name"]
     src_owner, src_repo_name = src_fullname.split("/")
-    want_sha = event.data["head_commit"]["id"]
+    # the commit the push event is referencing
+    want_sha = event.data["after"]
     target_ref = event.data["ref"]
 
     # skip branches from push events that are also pull requests
@@ -139,7 +140,7 @@ async def remove_branch(event, gh, gl, gl_user, *arg, **kwargs):
 # -----------------------------------
 
 
-async def sync_pr(pull_request, gh, gl, gl_user, src_repo_private, commit_sha=None):
+async def sync_pr(pull_request, gh, gl, gl_user, src_repo_private, want_sha):
     """Sync the git fork/branch referenced in a PR to GitLab.
 
     This isn't technically an event handler, but is used a couple different ways in this file.
@@ -149,9 +150,6 @@ async def sync_pr(pull_request, gh, gl, gl_user, src_repo_private, commit_sha=No
     src_repo_url = pull_request["head"]["repo"]["clone_url"]
     src_fullname = pull_request["head"]["repo"]["full_name"]
     base_fullname = pull_request["base"]["repo"]["full_name"]
-    # if commit_sha is provided, use that as the want_sha instead of the head sha of the PR
-    # this is used in the context of sync approvals, where a maintainer explicitly approves the sync of a specific commit
-    want_sha = commit_sha or pull_request["head"]["sha"]
 
     # pull requests coming from forks are pushed as branches in the form of
     # pr-<pr-number> instead of as their branch name as conflicts could occur
@@ -248,7 +246,13 @@ async def sync_pr_event(event, gh, gl, gl_user, *arg, **kwargs):
     """Sync the git fork/branch referenced in a PR to GitLab."""
     pull_request = event.data["pull_request"]
     src_repo_private = pull_request["head"]["repo"]["private"]
-    await sync_pr(pull_request, gh, gl, gl_user, src_repo_private)
+    if event.data["action"] == "synchronize":
+        # to prevent races between pushes to the PR, we want to explicitly sync the commit referenced in the push event
+        want_sha = event.data["after"]
+    else:
+        # these events are not triggered by new commits, so we sync the head
+        want_sha = pull_request["head"]["sha"]
+    await sync_pr(pull_request, gh, gl, gl_user, src_repo_private, want_sha=want_sha)
 
 
 @router.register("pull_request", action="closed")
@@ -307,8 +311,10 @@ async def respond_pr_comment(event, gh, gl, gl_user, *arg, **kwargs):
         commit_sha = event.data["review"]["commit_id"]
         pull_request = event.data["pull_request"]
         src_repo_private = pull_request["head"]["repo"]["private"]
-        # sync the approved commit
-        await sync_pr(pull_request, gh, gl, gl_user, src_repo_private, commit_sha)
+        # sync the approved commit explicitly
+        await sync_pr(
+            pull_request, gh, gl, gl_user, src_repo_private, want_sha=commit_sha
+        )
         # we cannot react to PR reviews like we can with issue/PR comments
 
 
