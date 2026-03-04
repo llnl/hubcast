@@ -17,6 +17,10 @@ from hubcast.web.gitlab import GitLabHandler
 
 log = logging.getLogger(__name__)
 
+# Set requester for both GitHub and GitLab clients to
+# identify Hubcast via the user-agent header
+REQUESTER = "hubcast"
+
 
 def main():
     app = web.Application()
@@ -70,11 +74,11 @@ def main():
         sys.exit(1)
 
     gh_client_factory = GitHubClientFactory(
-        conf.gh.app_id, conf.gh.privkey, conf.gh.requester, conf.gh.bot_user
+        conf.gh.app_id, conf.gh.privkey, REQUESTER, conf.gh.bot_user
     )
     gl_client_factory = GitLabClientFactory(
         conf.gl.instance_url,
-        conf.gl.requester,
+        REQUESTER,
         conf.gl.token,
         conf.gl.callback_url,
         conf.gl.webhook_secret,

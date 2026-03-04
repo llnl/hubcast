@@ -34,6 +34,7 @@ class GitLabClientFactory:
         """creates a GitLabClient for a specific user"""
         return GitLabClient(
             self.auth,
+            self.requester,
             self.instance_url,
             self.callback_url,
             self.webhook_secret,
@@ -45,12 +46,14 @@ class GitLabClient:
     def __init__(
         self,
         auth: GitLabAuthenticator,
+        requester: str,
         instance_url: str,
         callback_url: str,
         webhook_secret: str,
         user: str,
     ):
         self.auth = auth
+        self.requester = requester
         self.instance_url = instance_url
         self.callback_url = callback_url
         self.webhook_secret = webhook_secret
@@ -72,7 +75,7 @@ class GitLabClient:
         async with aiohttp.ClientSession() as session:
             gl = gidgetlab.aiohttp.GitLabAPI(
                 session,
-                requester=self.user,
+                requester=self.requester,
                 access_token=gl_token,
                 url=self.instance_url,
             )
@@ -117,7 +120,7 @@ class GitLabClient:
         async with aiohttp.ClientSession() as session:
             gl = gidgetlab.aiohttp.GitLabAPI(
                 session,
-                requester=self.user,
+                requester=self.requester,
                 access_token=gl_token,
                 url=self.instance_url,
             )
@@ -141,7 +144,7 @@ class GitLabClient:
         async with aiohttp.ClientSession() as session:
             gl = gidgetlab.aiohttp.GitLabAPI(
                 session,
-                requester=self.user,
+                requester=self.requester,
                 access_token=gl_token,
                 url=self.instance_url,
             )
@@ -164,7 +167,7 @@ class GitLabClient:
         async with aiohttp.ClientSession() as session:
             gl = gidgetlab.aiohttp.GitLabAPI(
                 session,
-                requester=self.user,
+                requester=self.requester,
                 access_token=gl_token,
                 url=self.instance_url,
             )

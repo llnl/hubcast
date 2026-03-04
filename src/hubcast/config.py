@@ -34,7 +34,6 @@ class GitHubConfig:
     def __init__(self):
         self.app_id = env_get("HC_GH_APP_IDENTIFIER")
         self.privkey = env_get("HC_GH_PRIVATE_KEY")
-        self.requester = env_get("HC_GH_REQUESTER")
         self.webhook_secret = env_get("HC_GH_SECRET")
         self.bot_user = env_get("HC_GH_BOT_USER")
 
@@ -42,9 +41,6 @@ class GitHubConfig:
 class GitLabConfig:
     def __init__(self):
         self.instance_url = env_get("HC_GL_URL")
-        # requester identifies the app making requests, it doesn't
-        # perform any auth function but is included in user-agent
-        self.requester = env_get("HC_GL_REQUESTER")
         self.token = env_get("HC_GL_TOKEN")
         self.token_type = env_get("HC_GL_TOKEN_TYPE", default="impersonation")
         self.webhook_secret = env_get("HC_GL_SECRET")
