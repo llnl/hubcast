@@ -83,7 +83,8 @@ Depending on the setup of your Hubcast installation, you can request assistance 
 
 The bot can perform the following actions:
 - Approve requests by non-maintainers: this will sync the PR/MR to the destination forge with the identity of the approver.
-- Retry the GitLab CI pipeline
+- Retry any failed jobs within the GitLab CI pipeline
+- Retry the entire pipeline
 
 #### Approval
 To securely sync commits from external collaborators, approvals require links to a commit hash. You can comment your approval on a PR review:
