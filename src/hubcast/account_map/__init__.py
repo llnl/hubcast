@@ -1,4 +1,6 @@
 from .file import FileMap
-from .ldap import LDAPMap
 
-__all__ = ["FileMap", "LDAPMap"]
+try:
+    from .ldap import LDAPMap
+except ImportError:
+    pass

@@ -7,13 +7,21 @@ import sys
 from aiohttp import web
 from aiojobs.aiohttp import setup
 
-from hubcast.account_map import FileMap, LDAPMap
+from hubcast.account_map import FileMap
 from hubcast.account_map.file import FileMapError
 from hubcast.clients.github import GitHubClientFactory
 from hubcast.clients.gitlab import GitLabClientFactory
 from hubcast.config import Config, ConfigError
 from hubcast.web.github import GitHubHandler
 from hubcast.web.gitlab import GitLabHandler
+
+try:
+    from hubcast.account_map import LDAPMap
+
+    LDAP_AVAILABLE = True
+except ImportError:
+    LDAP_AVAILABLE = False
+
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +65,12 @@ def main():
             log.exception("Error initializing file account map")
             sys.exit(1)
     elif conf.account_map_type == "ldap":
+        if not LDAP_AVAILABLE:
+            log.error(
+                "LDAP account map requested but python-ldap is not installed. "
+                "Install hubcast with the ldap extra: pip install hubcast[ldap]"
+            )
+            sys.exit(1)
         account_map = LDAPMap(
             conf.ldap_map_uri,
             conf.ldap_map_base,
