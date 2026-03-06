@@ -21,10 +21,9 @@ class Config:
             self.ldap_map_input = env_get("HC_LDAP_MAP_INPUT")
             self.ldap_map_output = env_get("HC_LDAP_MAP_OUTPUT")
             self.ldap_map_scope = env_get("HC_LDAP_MAP_SCOPE")
-            # optional settings: if None, the mapper will behave accordingly
-            self.ldap_map_bind_dn = env_get("HC_LDAP_MAP_BIND_DN", optional=True)
+            self.ldap_map_bind_dn = env_get("HC_LDAP_MAP_BIND_DN", default=None)
             self.ldap_map_bind_password = env_get(
-                "HC_LDAP_MAP_BIND_PASSWORD", optional=True
+                "HC_LDAP_MAP_BIND_PASSWORD", default=None
             )
 
         self.gh = GitHubConfig()
@@ -36,7 +35,7 @@ class GitHubConfig:
         self.app_id = env_get("HC_GH_APP_IDENTIFIER")
         self.privkey = env_get("HC_GH_PRIVATE_KEY")
         self.webhook_secret = env_get("HC_GH_SECRET")
-        self.bot_user = env_get("HC_GH_BOT_USER", optional=True)
+        self.bot_user = env_get("HC_GH_BOT_USER", default=None)
 
 
 class GitLabConfig:
@@ -48,7 +47,12 @@ class GitLabConfig:
         self.callback_url = env_get("HC_GL_CALLBACK_URL")
 
 
-def env_get(key: str, default=None, optional: bool = False):
+# a sentinel is a unique object used to distinguish between unset arguments
+# and arguments explicitly set to None, a valid value for some config options
+_sentinel = object()
+
+
+def env_get(key: str, default=_sentinel):
     """
     Retrieve environment variables.
 
@@ -58,14 +62,13 @@ def env_get(key: str, default=None, optional: bool = False):
         The environment variable key to retrieve.
     default: any, optional
         The default value to return if the environment variable is not set.
-    optional: bool, optional
-        If True, the default value is returned when the variable is not found. If False
-        and the variable is not found, a ConfigError is raised.
     """
 
     try:
         return os.environ[key]
     except KeyError:
-        if optional:
-            return default
-        raise ConfigError(f"Required environment variable not found: {key}")
+        # if the env variable is not set and no default is provided
+        if default is _sentinel:
+            raise ConfigError(f"Required environment variable not found: {key}")
+
+        return default
