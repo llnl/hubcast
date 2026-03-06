@@ -9,9 +9,15 @@ def test_env_get_var_or_default():
     """Should return the environment variable if set, else the default."""
 
     os.environ["TEST_ENV_VAR"] = "value_from_env"
-    assert env_get("TEST_ENV_VAR", default="default_value") == "value_from_env"
+    assert (
+        env_get("TEST_ENV_VAR", default="default_value", optional=True)
+        == "value_from_env"
+    )
     del os.environ["TEST_ENV_VAR"]
-    assert env_get("TEST_ENV_VAR", default="default_value") == "default_value"
+    assert (
+        env_get("TEST_ENV_VAR", default="default_value", optional=True)
+        == "default_value"
+    )
 
 
 def test_env_get_missing():
