@@ -76,7 +76,12 @@ To be an authorized user, they must be in the Hubcast instance account map AND h
 
 For example, if you want to sync a branch from GitHub → GitLab.com, your GitLab account must be registered in the mapping and be a member of the repository.
 
-If you expect contributions from users who aren't maintainers or who don't have accounts on the destination forge, Hubcast enables you to approve their requests via a bot-like interface.
+> [!NOTE]
+> Hubcast requires users to be assigned to the GitLab **developer** role to automatically sync commits to the destination forge.
+> If any unallowed action is performed, Hubcast will post a failed status check notifying users about unsuccessful syncs.
+> Review the [GitLab user roles](https://docs.gitlab.com/user/permissions) documentation for details on the permissions needed to perform repository actions.
+
+If you expect contributions from users who aren't members of the destination repository or don't have accounts on the destination forge, Hubcast enables you to approve their requests via a bot-like interface.
 
 ### Hubcast bot
 Depending on the setup of your Hubcast installation, you can request assistance from the bot by tagging an account (e.g., `@lc-hubcast help`) or the default `/hubcast help` in a PR/MR comment.
