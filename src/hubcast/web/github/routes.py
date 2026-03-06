@@ -148,12 +148,13 @@ async def sync_pr(pull_request, gh, gl, gl_user, src_repo_private):
 
     src_repo_url = pull_request["head"]["repo"]["clone_url"]
     src_fullname = pull_request["head"]["repo"]["full_name"]
+    base_fullname = pull_request["base"]["repo"]["full_name"]
     want_sha = pull_request["head"]["sha"]
 
     # pull requests coming from forks are pushed as branches in the form of
     # pr-<pr-number> instead of as their branch name as conflicts could occur
     # between multiple repositories
-    is_pull_request_fork = src_fullname != pull_request["base"]["repo"]["full_name"]
+    is_pull_request_fork = src_fullname != base_fullname
     if is_pull_request_fork:
         target_ref = f"refs/heads/pr-{pull_request_id}"
     else:
@@ -172,7 +173,7 @@ async def sync_pr(pull_request, gh, gl, gl_user, src_repo_private):
         return
 
     # get the repository configuration from .github/hubcast.yml
-    repo_config = await get_repo_config(gh, src_fullname)
+    repo_config = await get_repo_config(gh, base_fullname)
     if not repo_config.draft_sync and pull_request["draft"]:
         if repo_config.draft_sync_msg:
             await gh.set_check_status(
@@ -252,13 +253,14 @@ async def sync_pr_event(event, gh, gl, gl_user, *arg, **kwargs):
 async def remove_pr(event, gh, gl, gl_user, *arg, **kwargs):
     pull_request = event.data["pull_request"]
     src_fullname = pull_request["head"]["repo"]["full_name"]
+    base_fullname = pull_request["base"]["repo"]["full_name"]
 
     # if the pull request comes from a fork we should clean up
     # the branch upon closing or merging the PR. However, if the
     # pull request comes from an internal branch we should wait
     # to clean up the branch when the branch is deleted from the
     # internal repository
-    is_pull_request_fork = src_fullname != pull_request["base"]["repo"]["full_name"]
+    is_pull_request_fork = src_fullname != base_fullname
     if not is_pull_request_fork:
         return
 
@@ -266,7 +268,7 @@ async def remove_pr(event, gh, gl, gl_user, *arg, **kwargs):
     target_ref = f"refs/heads/pr-{pull_request_id}"
 
     # get the repository configuration from .github/hubcast.yml
-    repo_config = await get_repo_config(gh, src_fullname)
+    repo_config = await get_repo_config(gh, base_fullname)
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
@@ -328,17 +330,18 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
 
         # get the branch this PR belongs to
         src_fullname = pull_request["head"]["repo"]["full_name"]
+        base_fullname = pull_request["base"]["repo"]["full_name"]
         # pull requests coming from forks are pushed as branches in the form of
         # pr-<pr-number> instead of as their branch name as conflicts could occur
         # between multiple repositories
-        is_pull_request_fork = src_fullname != pull_request["base"]["repo"]["full_name"]
+        is_pull_request_fork = src_fullname != base_fullname
         if is_pull_request_fork:
             branch = f"pr-{pull_request_id}"
         else:
             branch = pull_request["head"]["ref"]
 
         # get the gitlab repo information and run the pipeline
-        repo_config = await get_repo_config(gh, src_fullname, refresh=True)
+        repo_config = await get_repo_config(gh, base_fullname, refresh=True)
         dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
         pipeline_url = await gl.run_pipeline(dest_fullname, branch)
 
@@ -359,17 +362,18 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
 
         # get the branch this PR belongs to
         src_fullname = pull_request["head"]["repo"]["full_name"]
+        base_fullname = pull_request["base"]["repo"]["full_name"]
         # pull requests coming from forks are pushed as branches in the form of
         # pr-<pr-number> instead of as their branch name as conflicts could occur
         # between multiple repositories
-        is_pull_request_fork = src_fullname != pull_request["base"]["repo"]["full_name"]
+        is_pull_request_fork = src_fullname != base_fullname
         if is_pull_request_fork:
             branch = f"pr-{pull_request_id}"
         else:
             branch = pull_request["head"]["ref"]
 
         # get the gitlab repo information and run the pipeline
-        repo_config = await get_repo_config(gh, src_fullname, refresh=True)
+        repo_config = await get_repo_config(gh, base_fullname, refresh=True)
         dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
         pipeline_id = await gl.get_latest_pipeline(dest_fullname, branch)
 
