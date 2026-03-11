@@ -9,6 +9,7 @@ from hubcast.web.github.routes import (
     remove_pr,
     rerun_check,
     respond_comment,
+    respond_pr_comment,
     sync_branch,
     sync_pr_event,
 )
@@ -91,6 +92,21 @@ def mock_comment_event():
             "pull_request": {},  # indicates PR comment
         },
         "comment": {"node_id": 456, "body": "@hubcast-bot help"},
+    }
+    return event
+
+
+@pytest.fixture
+def mock_review_event(mock_pr_data_for_comment):
+    """Mocked pull request review."""
+    event = Mock()
+    event.data = {
+        "review": {
+            "node_id": 789,
+            "body": "@hubcast-bot approve",
+            "commit_id": "pr-sha-123",
+        },
+        "pull_request": mock_pr_data_for_comment,
     }
     return event
 
@@ -449,21 +465,20 @@ async def test_respond_comment_help(
 
 @pytest.mark.asyncio
 async def test_respond_comment_approve(
-    mock_comment_event,
+    mock_review_event,
     mock_gh,
     mock_gl,
     mock_repligit_ops,
     mock_pr_data_for_comment,
 ):
     """Should sync PR when @bot approve is mentioned."""
-    mock_comment_event.data["comment"]["body"] = "@hubcast-bot approve"
     mock_gh.get_pr = AsyncMock(return_value=mock_pr_data_for_comment)
 
     # old sha to simulate out-of-date destination
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
 
-    result = await respond_comment(
-        event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+    result = await respond_pr_comment(
+        event=mock_review_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
     assert result["action"] == "approve_sent"
