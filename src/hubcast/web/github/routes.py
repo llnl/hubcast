@@ -337,15 +337,8 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
         response = comments.help_message(bot_caller)
 
     elif re.search(f"{bot_caller} approve", comment, re.IGNORECASE):
-        # syncs PR changes to the destination on behalf of the commenter
-        # this does not handle PR deletions, those will need to be manually cleaned by project maintainers
-        pull_request_id = event.data["issue"]["number"]
-        pull_request = await gh.get_pr(pull_request_id)
-        src_repo_private = pull_request["head"]["repo"]["private"]
-        await sync_pr(pull_request, gh, gl, gl_user, src_repo_private)
-
-        # note: the user will see a +1 regardless of whether a sync truly occurred
-        plus_one = True
+        # TODO when docs PR is merged add a link to the image showing the review process
+        response = "To approve the sync of this PR, please use the GitHub review feature to submit an approval. This ensures the approval is tied to a specific commit to avoid unintended syncing of malicious commits."
 
     elif re.search(
         f"{bot_caller} (re[-]?)?(run|start) pipeline", comment, re.IGNORECASE
