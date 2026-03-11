@@ -189,9 +189,8 @@ class GitHubClient:
 
     async def react_to_comment(self, node_id: str, reaction: str):
         """
-        Add an emoji reaction to a GitHub PR review.
+        Add an emoji reaction to a GitHub issue comment or PR review.
         See `GH_REACTIONS` for a list of emoji options.
-        Supports reacting to both issue comments and reviews.
 
         Done via GraphQL due to inability to react to reviews via REST API:
         https://github.com/orgs/community/discussions/29018
