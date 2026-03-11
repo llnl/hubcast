@@ -13,7 +13,6 @@ dependencies = [
     "gidgetlab",
     "repligit[aiohttp]",
     "pyyaml",
-    "python-ldap"
 ]
 authors = [
     { name = "Alec Scott" },
@@ -33,6 +32,10 @@ Homepage = "https://github.com/llnl/hubcast"
 Issues = "https://github.com/llnl/hubcast/issues"
 
 [project.optional-dependencies]
+# https://www.python-ldap.org/en/latest/installing.html#build-prerequisites
+ldap = [
+    "python-ldap"
+]
 dev = [
     "pytest",
     "pytest-asyncio",
