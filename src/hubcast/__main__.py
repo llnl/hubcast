@@ -69,6 +69,7 @@ def main():
             log.error(
                 "LDAP account map requested but python-ldap is not installed. "
                 "Install hubcast with the ldap extra: pip install hubcast[ldap]"
+                "or: spack install hubcast+ldap"
             )
             sys.exit(1)
         account_map = LDAPMap(
