@@ -5,6 +5,20 @@ from gidgetlab import routing, sansio
 
 log = logging.getLogger(__name__)
 
+# https://docs.github.com/en/rest/guides/using-the-rest-api-to-interact-with-checks#about-check-suites
+# https://docs.gitlab.com/api/pipelines/#list-project-pipelines -> status description
+# not mapping all statuses to avoid churn in posting updates
+GITLAB_TO_GITHUB_STATUS = {
+    "created": "queued",
+    "pending": "queued",
+    "manual": "queued",
+    "running": "in_progress",
+    "failed": "failure",
+    "canceled": "cancelled",
+    "skipped": "skipped",
+    "success": "success",
+}
+
 
 class GitLabRouter(routing.Router):
     """
@@ -45,11 +59,14 @@ class GitLabRouter(routing.Router):
 router = GitLabRouter()
 
 
+@router.register("Pipeline Hook", status="created")
 @router.register("Pipeline Hook", status="pending")
+@router.register("Pipeline Hook", status="manual")
 @router.register("Pipeline Hook", status="running")
-@router.register("Pipeline Hook", status="success")
 @router.register("Pipeline Hook", status="failed")
 @router.register("Pipeline Hook", status="canceled")
+@router.register("Pipeline Hook", status="skipped")
+@router.register("Pipeline Hook", status="success")
 async def status_relay(event, gh, gh_check_name, *arg, **kwargs):
     """Relay status of a GitLab pipeline back to GitHub."""
     # get ref from event
@@ -59,19 +76,6 @@ async def status_relay(event, gh, gh_check_name, *arg, **kwargs):
     ci_status = event.data["object_attributes"]["status"]
     pipeline_url = event.data["object_attributes"]["url"]
 
-    # https://docs.github.com/en/rest/guides/using-the-rest-api-to-interact-with-checks#about-check-suites
-    # https://docs.gitlab.com/api/pipelines/#list-project-pipelines -> status description
-
-    # translate between GitLab and GitHub statuses
-    if ci_status == "pending":
-        status = "queued"
-    elif ci_status == "running":
-        status = "in_progress"
-    elif ci_status == "failed":
-        status = "failure"
-    elif ci_status == "canceled":
-        status = "cancelled"
-    else:
-        status = ci_status
+    status = GITLAB_TO_GITHUB_STATUS[ci_status]
 
     await gh.set_check_status(ref, gh_check_name, status, pipeline_url)
