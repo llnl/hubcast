@@ -315,7 +315,7 @@ async def respond_pr_comment(event, gh, gl, gl_user, *arg, **kwargs):
         await sync_pr(
             pull_request, gh, gl, gl_user, src_repo_private, want_sha=commit_sha
         )
-        # we cannot react to PR reviews like we can with issue/PR comments
+        await gh.react_to_comment(event.data["review"]["node_id"], "+1")
 
 
 @router.register("issue_comment", action="created")
@@ -420,7 +420,7 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
         await gh.post_comment(event.data["issue"]["number"], response)
 
     if plus_one:
-        await gh.react_to_comment(event.data["comment"]["id"], "+1")
+        await gh.react_to_comment(event.data["comment"]["node_id"], "+1")
 
 
 @router.register("check_run", action="rerequested")
