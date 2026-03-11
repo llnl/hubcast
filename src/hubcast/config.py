@@ -21,9 +21,9 @@ class Config:
             self.ldap_map_input = env_get("HC_LDAP_MAP_INPUT")
             self.ldap_map_output = env_get("HC_LDAP_MAP_OUTPUT")
             self.ldap_map_scope = env_get("HC_LDAP_MAP_SCOPE")
-            self.ldap_map_bind_dn = env_get("HC_LDAP_MAP_BIND_DN", default=None)
+            self.ldap_map_bind_dn = env_get("HC_LDAP_MAP_BIND_DN", optional=True)
             self.ldap_map_bind_password = env_get(
-                "HC_LDAP_MAP_BIND_PASSWORD", default=None
+                "HC_LDAP_MAP_BIND_PASSWORD", optional=True
             )
 
         self.gh = GitHubConfig()
@@ -35,7 +35,7 @@ class GitHubConfig:
         self.app_id = env_get("HC_GH_APP_IDENTIFIER")
         self.privkey = env_get("HC_GH_PRIVATE_KEY")
         self.webhook_secret = env_get("HC_GH_SECRET")
-        self.bot_user = env_get("HC_GH_BOT_USER", default=None)
+        self.bot_user = env_get("HC_GH_BOT_USER", optional=True)
 
 
 class GitLabConfig:
@@ -47,12 +47,7 @@ class GitLabConfig:
         self.callback_url = env_get("HC_GL_CALLBACK_URL")
 
 
-# a sentinel is a unique object used to distinguish between unset arguments
-# and arguments explicitly set to None, a valid value for some config options
-_sentinel = object()
-
-
-def env_get(key: str, default=_sentinel):
+def env_get(key: str, default=None, optional: bool = False):
     """
     Retrieve environment variables.
 
@@ -62,13 +57,18 @@ def env_get(key: str, default=_sentinel):
         The environment variable key to retrieve.
     default: any, optional
         The default value to return if the environment variable is not set.
+        If you want the return value to be None if not set, use optional=True instead.
+    optional: bool, optional
+        If True and no default is provided, return None when the environment variable is not set.
     """
 
     try:
         return os.environ[key]
     except KeyError:
-        # if the env variable is not set and no default is provided
-        if default is _sentinel:
-            raise ConfigError(f"Required environment variable not found: {key}")
+        if default is not None:
+            return default
 
-        return default
+        if optional:
+            return None
+
+        raise ConfigError(f"Required environment variable not found: {key}")
