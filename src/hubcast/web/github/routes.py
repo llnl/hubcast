@@ -299,11 +299,8 @@ async def remove_pr(event, gh, gl, gl_user, *arg, **kwargs):
 @router.register("pull_request_review", action="submitted")
 async def respond_pr_comment(event, gh, gl, gl_user, *arg, **kwargs):
     comment = event.data["review"]["body"]
-    if gh.bot_user:
-        bot_caller = f"@{gh.bot_user}"
-    else:
-        bot_caller = "/hubcast"
-    if re.search(f"{bot_caller} approve", comment, re.IGNORECASE):
+
+    if re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
         # sync PR changes to the destination on behalf of the commenter
         # does not handle PR deletions, those will need to be manually cleaned by project maintainers
 
@@ -328,20 +325,15 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
     response = None
     plus_one = False
 
-    if gh.bot_user:
-        bot_caller = f"@{gh.bot_user}"
-    else:
-        bot_caller = "/hubcast"
+    if re.search(f"{gh.bot_caller} help", comment, re.IGNORECASE):
+        response = comments.help_message(gh.bot_caller)
 
-    if re.search(f"{bot_caller} help", comment, re.IGNORECASE):
-        response = comments.help_message(bot_caller)
-
-    elif re.search(f"{bot_caller} approve", comment, re.IGNORECASE):
+    elif re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
         # TODO when docs PR is merged add a link to the image showing the review process
         response = "To approve the sync of this PR, please use the GitHub review feature to submit an approval. This ensures the approval is tied to a specific commit to avoid unintended syncing of malicious commits."
 
     elif re.search(
-        f"{bot_caller} (re[-]?)?(run|start) pipeline", comment, re.IGNORECASE
+        f"{gh.bot_caller} (re[-]?)?(run|start) pipeline", comment, re.IGNORECASE
     ):
         # allows a project maintainer to restart the pipeline for a PR; should be used for issues unrelated for code changes
         # this process will not sync changes, as an external collaborator could submit malicious changes and trigger a sync without explicit approval on the commit hash (see `respond_pr_comment`)
@@ -371,7 +363,7 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
             response = "I had a problem starting the pipeline."
 
     elif re.search(
-        f"{bot_caller} restart failed(?:[- ]?jobs)?", comment, re.IGNORECASE
+        f"{gh.bot_caller} restart failed(?:[- ]?jobs)?", comment, re.IGNORECASE
     ):
         pull_request_id = event.data["issue"]["number"]
         pull_request = await gh.get_pr(pull_request_id)

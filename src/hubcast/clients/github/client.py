@@ -23,24 +23,24 @@ class InvalidConfigYAMLError(Exception):
 
 
 class GitHubClientFactory:
-    def __init__(self, app_id, privkey, requester, bot_user):
+    def __init__(self, app_id, privkey, requester, bot_caller):
         self.requester = requester
         self.auth = GitHubAuthenticator(requester, privkey, app_id)
-        self.bot_user = bot_user
+        self.bot_caller = bot_caller
 
     def create_client(self, repo_owner, repo_name):
         return GitHubClient(
-            self.auth, self.requester, repo_owner, repo_name, self.bot_user
+            self.auth, self.requester, repo_owner, repo_name, self.bot_caller
         )
 
 
 class GitHubClient:
-    def __init__(self, auth, requester, repo_owner, repo_name, bot_user):
+    def __init__(self, auth, requester, repo_owner, repo_name, bot_caller):
         self.auth = auth
         self.requester = requester
         self.repo_owner = repo_owner
         self.repo_name = repo_name
-        self.bot_user = bot_user
+        self.bot_caller = bot_caller
 
     async def set_check_status(
         self,
