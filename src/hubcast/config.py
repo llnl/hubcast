@@ -21,7 +21,6 @@ class Config:
             self.ldap_map_input = env_get("HC_LDAP_MAP_INPUT")
             self.ldap_map_output = env_get("HC_LDAP_MAP_OUTPUT")
             self.ldap_map_scope = env_get("HC_LDAP_MAP_SCOPE")
-            # optional settings: if None, the mapper will behave accordingly
             self.ldap_map_bind_dn = env_get("HC_LDAP_MAP_BIND_DN", optional=True)
             self.ldap_map_bind_password = env_get(
                 "HC_LDAP_MAP_BIND_PASSWORD", optional=True
@@ -58,14 +57,18 @@ def env_get(key: str, default=None, optional: bool = False):
         The environment variable key to retrieve.
     default: any, optional
         The default value to return if the environment variable is not set.
+        If you want the return value to be None if not set, use optional=True instead.
     optional: bool, optional
-        If True, the default value is returned when the variable is not found. If False
-        and the variable is not found, a ConfigError is raised.
+        If True and no default is provided, return None when the environment variable is not set.
     """
 
     try:
         return os.environ[key]
     except KeyError:
-        if optional:
+        if default is not None:
             return default
+
+        if optional:
+            return None
+
         raise ConfigError(f"Required environment variable not found: {key}")
