@@ -6,16 +6,16 @@ from gidgethub import aiohttp as gh_aiohttp
 
 from .auth import GitHubAuthenticator
 
-VALID_GH_REACTIONS = [
-    "+1",
-    "-1",
-    "laugh",
-    "hooray",
-    "confused",
-    "heart",
-    "rocket",
-    "eyes",
-]
+GH_REACTIONS = {
+    "+1": "THUMBS_UP",
+    "-1": "THUMBS_DOWN",
+    "laugh": "LAUGH",
+    "confused": "CONFUSED",
+    "heart": "HEART",
+    "hooray": "HOORAY",
+    "rocket": "ROCKET",
+    "eyes": "EYES",
+}
 
 
 class InvalidConfigYAMLError(Exception):
@@ -187,15 +187,24 @@ class GitHubClient:
             url = f"/repos/{self.repo_owner}/{self.repo_name}/issues/{issue_number}/comments"
             await gh.post(url, data=payload)
 
-    async def react_to_comment(self, comment_id: int, reaction: str):
-        """Add an emoji reaction to a GitHub PR comment.
-        See `VALID_GH_REACTIONS` for a list of emoji options.
+    async def react_to_comment(self, node_id: str, reaction: str):
         """
+        Add an emoji reaction to a GitHub PR review.
+        See `GH_REACTIONS` for a list of emoji options.
+        Supports reacting to both issue comments and reviews.
 
-        if reaction not in VALID_GH_REACTIONS:
-            raise ValueError(f"{reaction} is not a valid reaction")
-
-        payload = {"content": reaction}
+        Done via GraphQL due to inability to react to reviews via REST API:
+        https://github.com/orgs/community/discussions/29018
+        """
+        # https://docs.github.com/en/graphql/reference/mutations#addreaction
+        mutation = """
+        mutation($subjectId: ID!, $content: ReactionContent!) {
+        addReaction(input: { subjectId: $subjectId, content: $content }) {
+            reaction { content }
+            subject { id }
+        }
+        }
+        """
 
         gh_token = await self.auth.authenticate_installation(
             self.repo_owner, self.repo_name
@@ -204,8 +213,10 @@ class GitHubClient:
         async with aiohttp.ClientSession() as session:
             gh = gh_aiohttp.GitHubAPI(session, self.requester, oauth_token=gh_token)
 
-            url = f"/repos/{self.repo_owner}/{self.repo_name}/issues/comments/{comment_id}/reactions"
-            await gh.post(url, data=payload)
+            # graphql expects a string to represent the reaction
+            await gh.graphql(
+                mutation, subjectId=node_id, content=GH_REACTIONS[reaction]
+            )
 
     async def get_branch(self, name: str):
         """Return individual branch data."""
