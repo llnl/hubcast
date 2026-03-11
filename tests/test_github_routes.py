@@ -25,6 +25,7 @@ def mock_push_event():
             "clone_url": "https://github.com/owner/repo.git",
             "full_name": "owner/repo",
         },
+        "after": "sha-123",
         "head_commit": {"id": "sha-123"},
         "ref": "refs/heads/main",
     }
@@ -56,11 +57,12 @@ def mock_pr_event():
                     "full_name": "fork-owner/repo",
                     "private": False,
                 },
-                "sha": "pr-sha-123",
                 "ref": "feature-branch",
             },
             "base": {"repo": {"full_name": "owner/repo"}},
-        }
+        },
+        "action": "synchronize",
+        "after": "pr-sha-123",
     }
     return event
 
@@ -88,7 +90,7 @@ def mock_comment_event():
             "number": 123,
             "pull_request": {},  # indicates PR comment
         },
-        "comment": {"id": 456, "body": "@hubcast-bot help"},
+        "comment": {"node_id": 456, "body": "@hubcast-bot help"},
     }
     return event
 
