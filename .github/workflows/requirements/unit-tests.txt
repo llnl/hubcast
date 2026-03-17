@@ -1,6 +1,6 @@
 aiohttp==3.13.3
 build==1.4.0
-cachetools==7.0.1
+cachetools==7.0.5
 coverage==7.13.2
 gidgethub==5.4.0
 gidgetlab==2.1.1
