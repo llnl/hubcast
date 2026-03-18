@@ -89,7 +89,7 @@ def main():
         sys.exit(1)
 
     gh_client_factory = GitHubClientFactory(
-        conf.gh.app_id, conf.gh.privkey, REQUESTER, conf.gh.bot_user
+        conf.gh.app_id, conf.gh.privkey, REQUESTER, conf.gh.bot_caller
     )
     gl_client_factory = GitLabClientFactory(
         conf.gl.instance_url,

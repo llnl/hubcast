@@ -35,7 +35,10 @@ class GitHubConfig:
         self.app_id = env_get("HC_GH_APP_IDENTIFIER")
         self.privkey = env_get("HC_GH_PRIVATE_KEY")
         self.webhook_secret = env_get("HC_GH_SECRET")
-        self.bot_user = env_get("HC_GH_BOT_USER", optional=True)
+
+        self.bot_caller = env_get("HC_GH_BOT_USER", default="/hubcast")
+        if not self.bot_caller.startswith(("/", "@")):
+            self.bot_caller = f"@{self.bot_caller}"
 
 
 class GitLabConfig:
