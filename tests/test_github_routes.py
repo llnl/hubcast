@@ -151,7 +151,7 @@ def mock_gh():
     gh.get_prs = AsyncMock(return_value=[])
     gh.get_branch = AsyncMock(return_value={"commit": {"sha": "default-sha"}})
     gh.set_check_status = AsyncMock()
-    gh.bot_user = "hubcast-bot"
+    gh.bot_caller = "hubcast-bot"
     gh.post_comment = AsyncMock()
     gh.react_to_comment = AsyncMock()
     gh.auth.authenticate_installation = AsyncMock(return_value="gh-token-123")
