@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
+import yaml
 
 from hubcast.web.github.utils import config_cache, create_config, get_repo_config
 
@@ -11,12 +12,7 @@ def mock_github_client():
     """Mock GitHub client."""
     client = AsyncMock()
     client.get_repo_config = AsyncMock(
-        return_value={
-            "Repo": {
-                "owner": "owner",
-                "name": "repo",
-            }
-        }
+        return_value="Repo:\n  owner: owner\n  name: repo\n"
     )
     return client
 
@@ -88,9 +84,9 @@ async def test_get_repo_config_refreshes(mock_github_client):
     await get_repo_config(mock_github_client, "owner/repo")
 
     # update mock to return different data
-    mock_github_client.get_repo_config.return_value = {
-        "Repo": {"owner": "new-org", "name": "new-repo"}
-    }
+    mock_github_client.get_repo_config.return_value = (
+        "Repo:\n  owner: new-org\n  name: new-repo\n"
+    )
 
     # second call with refresh
     config = await get_repo_config(mock_github_client, "owner/repo", refresh=True)
@@ -99,3 +95,28 @@ async def test_get_repo_config_refreshes(mock_github_client):
     assert config.dest_name == "new-repo"
     # should be called twice due to refresh
     assert mock_github_client.get_repo_config.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_get_repo_config_invalid_yaml():
+    """Test handling of invalid YAML in repo config."""
+    gh = AsyncMock()
+    gh.get_repo_config = AsyncMock(return_value="invalid: yaml: :")
+    gh.repo_owner = "owner"
+    gh.repo_name = "repo"
+
+    with pytest.raises(yaml.YAMLError):
+        await get_repo_config(gh, "owner/repo")
+
+
+@pytest.mark.asyncio
+async def test_get_repo_config_missing_required_fields():
+    """Test handling of missing fields in repo config."""
+    gh = AsyncMock()
+    # valid YAML but missing the required 'Repo' key
+    gh.get_repo_config = AsyncMock(return_value="NotRepo:\n  owner: owner\n")
+    gh.repo_owner = "owner"
+    gh.repo_name = "repo"
+
+    with pytest.raises(KeyError):
+        await get_repo_config(gh, "owner/repo")
