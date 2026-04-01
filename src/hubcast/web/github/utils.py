@@ -21,6 +21,7 @@ def create_config(fullname: str, data: Dict) -> RepoConfig:
 
 
 async def get_repo_config(gh: GitHubClient, fullname: str, refresh: bool = False):
+    fetched = False
     if fullname in config_cache and not refresh:
         config = config_cache[fullname]
     else:
@@ -43,5 +44,6 @@ async def get_repo_config(gh: GitHubClient, fullname: str, refresh: bool = False
             )
 
         config_cache[fullname] = config
+        fetched = True
 
-    return config
+    return config, fetched
