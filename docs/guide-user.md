@@ -81,6 +81,17 @@ For example, if you want to sync a branch from GitHub → GitLab.com, your GitLa
 > If any unallowed action is performed, Hubcast will post a failed status check notifying users about unsuccessful syncs.
 > Review the [GitLab user roles](https://docs.gitlab.com/user/permissions) documentation for details on the permissions needed to perform repository actions.
 
+### Webhook Setup
+
+After installing Hubcast on your repository, the first push to the default branch will trigger webhook setup on the destination repository. This webhook allows CI status to be reported back to the source forge.
+
+**Important:** Webhook creation requires the GitLab **maintainer** role. If the first push to the default branch is performed by a user with only the developer role:
+- Branch sync will succeed
+- Webhook will not be created
+- CI status will not be reported back
+
+To resolve this, have a user with the maintainer role push to the default branch; an empty commit is sufficient.
+
 If you expect contributions from users who aren't members of the destination repository or don't have accounts on the destination forge, Hubcast enables you to approve their requests via a bot-like interface.
 
 ### Hubcast bot
