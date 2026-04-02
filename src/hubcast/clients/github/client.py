@@ -2,8 +2,8 @@ import logging
 from urllib.parse import urlparse
 
 import aiohttp
-from gidgethub import aiohttp as gh_aiohttp
 from gidgethub import HTTPException
+from gidgethub import aiohttp as gh_aiohttp
 
 from .auth import GitHubAuthenticator
 
@@ -137,7 +137,10 @@ class GitHubClient:
                 if exc.status_code == 404:
                     log.info(
                         "Repo config file not found at .github/hubcast.yml",
-                        extra={"repo_owner": self.repo_owner, "repo_name": self.repo_name},
+                        extra={
+                            "repo_owner": self.repo_owner,
+                            "repo_name": self.repo_name,
+                        },
                     )
                 raise
 
