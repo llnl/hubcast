@@ -1,9 +1,13 @@
+import logging
 from urllib.parse import urlparse
 
 import aiohttp
+from gidgethub import HTTPException
 from gidgethub import aiohttp as gh_aiohttp
 
 from .auth import GitHubAuthenticator
+
+log = logging.getLogger(__name__)
 
 GH_REACTIONS = {
     "+1": "THUMBS_UP",
@@ -127,7 +131,18 @@ class GitHubClient:
             # get the contents of the repository hubcast.yml file
             url = f"/repos/{self.repo_owner}/{self.repo_name}/contents/.github/hubcast.yml"
             # get raw contents rather than base64 encoded text
-            return await gh.getitem(url, accept="application/vnd.github.raw")
+            try:
+                return await gh.getitem(url, accept="application/vnd.github.raw")
+            except HTTPException as exc:
+                if exc.status_code == 404:
+                    log.info(
+                        "Repo config file not found at .github/hubcast.yml",
+                        extra={
+                            "repo_owner": self.repo_owner,
+                            "repo_name": self.repo_name,
+                        },
+                    )
+                raise
 
     async def get_pr(self, id):
         """Return individual PR data."""

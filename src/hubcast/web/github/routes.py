@@ -53,18 +53,25 @@ async def sync_branch(event, gh, gl, gl_user, *arg, **kwargs):
     if await gh.get_prs(branch=target_ref):
         return
 
-    repo_config = await get_repo_config(gh, src_fullname, refresh=True)
+    # only refresh config on default branch pushes (where .github/hubcast.yml lives)
+    default_branch = event.data["repository"]["default_branch"]
+    is_default_branch = target_ref == f"refs/heads/{default_branch}"
+    repo_config, fetched = await get_repo_config(
+        gh, src_fullname, refresh=is_default_branch
+    )
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
 
-    # setup callback webhook on GitLab
-    webhook_data = {
-        "gh_owner": src_owner,
-        "gh_repo": src_repo_name,
-        "gh_check": repo_config.check_name,
-    }
-    await gl.set_webhook(dest_fullname, webhook_data)
+    # only set/update webhook on default branch pushes when config cache was bypassed (refresh or initial fetch)
+    if fetched and is_default_branch:
+        # setup callback webhook on GitLab
+        webhook_data = {
+            "gh_owner": src_owner,
+            "gh_repo": src_repo_name,
+            "gh_check": repo_config.check_name,
+        }
+        await gl.set_webhook(dest_fullname, webhook_data)
     gl_token = await gl.auth.authenticate_user(gl_user)
 
     # sync commits from GitHub -> GitLab
@@ -113,7 +120,7 @@ async def remove_branch(event, gh, gl, gl_user, *arg, **kwargs):
     src_fullname = event.data["repository"]["full_name"]
     target_ref = event.data["ref"]
 
-    repo_config = await get_repo_config(gh, src_fullname, refresh=True)
+    repo_config, _ = await get_repo_config(gh, src_fullname)
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
@@ -173,7 +180,7 @@ async def sync_pr(pull_request, gh, gl, gl_user, src_repo_private, want_sha):
         return
 
     # get the repository configuration from .github/hubcast.yml
-    repo_config = await get_repo_config(gh, base_fullname)
+    repo_config, _ = await get_repo_config(gh, base_fullname)
     if not repo_config.draft_sync and pull_request["draft"]:
         if repo_config.draft_sync_msg:
             await gh.set_check_status(
@@ -274,7 +281,7 @@ async def remove_pr(event, gh, gl, gl_user, *arg, **kwargs):
     target_ref = f"refs/heads/pr-{pull_request_id}"
 
     # get the repository configuration from .github/hubcast.yml
-    repo_config = await get_repo_config(gh, base_fullname)
+    repo_config, _ = await get_repo_config(gh, base_fullname)
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
@@ -352,7 +359,7 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
             branch = pull_request["head"]["ref"]
 
         # get the gitlab repo information and run the pipeline
-        repo_config = await get_repo_config(gh, base_fullname, refresh=True)
+        repo_config, _ = await get_repo_config(gh, base_fullname)
         dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
         pipeline_url = await gl.run_pipeline(dest_fullname, branch)
 
@@ -384,7 +391,7 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
             branch = pull_request["head"]["ref"]
 
         # get the gitlab repo information and run the pipeline
-        repo_config = await get_repo_config(gh, base_fullname, refresh=True)
+        repo_config, _ = await get_repo_config(gh, base_fullname)
         dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
         pipeline_id = await gl.get_latest_pipeline(dest_fullname, branch)
 
@@ -428,6 +435,6 @@ async def rerun_check(event, gh, gl, gl_user, *arg, **kwargs):
         return
 
     # get the GL repo info and run the pipeline
-    repo_config = await get_repo_config(gh, src_fullname, refresh=True)
+    repo_config, _ = await get_repo_config(gh, src_fullname)
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     await gl.run_pipeline(dest_fullname, branch)

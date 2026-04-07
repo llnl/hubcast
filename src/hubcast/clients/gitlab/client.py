@@ -1,10 +1,13 @@
+import logging
 import urllib.parse
 from typing import Dict
 
 import aiohttp
-import gidgetlab.aiohttp
+import gidgetlab
 
 from .auth import GitLabAuthenticator, GitLabSingleUserAuthenticator
+
+log = logging.getLogger(__name__)
 
 
 class GitLabClientFactory:
@@ -84,8 +87,15 @@ class GitLabClient:
 
             repo_id = urllib.parse.quote_plus(gl_fullname)
             url = f"/projects/{repo_id}/hooks"
-
-            hooks_data = await gl.getitem(url)
+            try:
+                hooks_data = await gl.getitem(url)
+            except gidgetlab.exceptions.BadRequest as exc:
+                if exc.status_code == 403:
+                    log.info(
+                        "User cannot access GitLab webhooks; skipping set_webhook. Must have `maintainer` role.",
+                        extra={"user": self.user, "repo": gl_fullname},
+                    )
+                    return
             for hook in hooks_data:
                 if hook["name"] == "hubcast":
                     existing_hook = hook
