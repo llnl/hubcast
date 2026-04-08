@@ -25,6 +25,7 @@ def mock_push_event():
         "repository": {
             "clone_url": "https://github.com/owner/repo.git",
             "full_name": "owner/repo",
+            "default_branch": "main",
         },
         "after": "sha-123",
         "head_commit": {"id": "sha-123"},
@@ -175,7 +176,14 @@ def mock_repligit_ops():
         patch("hubcast.web.github.routes.fetch_pack") as mock_fetch,
         patch("hubcast.web.github.routes.send_pack") as mock_send,
     ):
-        # mock_get_config.return_value = Mock(dest_org="owner", dest_name="repo")
+        # get_repo_config returns a tuple (config, fetched)
+        default_config = Mock(
+            dest_org="owner",
+            dest_name="repo",
+            draft_sync=True,
+            draft_sync_msg=True,
+        )
+        mock_get_config.return_value = (default_config, True)
 
         mock_ls.return_value = {"refs/heads/main": "old-sha-456"}
 
@@ -314,8 +322,9 @@ async def test_sync_pr_skip_draft(mock_pr_event, mock_gh, mock_gl, mock_repligit
     """PR sync should be skipped for draft PRs (when draft_sync is False)."""
 
     mock_pr_event.data["pull_request"]["draft"] = True
-    mock_repligit_ops["get_repo_config"].return_value = Mock(
-        draft_sync=False,
+    mock_repligit_ops["get_repo_config"].return_value = (
+        Mock(draft_sync=False, dest_org="owner", dest_name="repo"),
+        True,
     )
 
     result = await sync_pr_event(

@@ -67,12 +67,14 @@ async def test_get_repo_config_uses_cache(mock_github_client):
     """Should use cached config on second call."""
 
     # first call -- fetches from client
-    config1 = await get_repo_config(mock_github_client, "owner/repo")
+    config1, fetched1 = await get_repo_config(mock_github_client, "owner/repo")
 
     # second call -- uses cache
-    config2 = await get_repo_config(mock_github_client, "owner/repo")
+    config2, fetched2 = await get_repo_config(mock_github_client, "owner/repo")
 
     assert config1.dest_org == config2.dest_org
+    assert fetched1 is True  # first call should fetch from GitHub
+    assert fetched2 is False  # second call should use cache
     mock_github_client.get_repo_config.assert_called_once()  # should only be called once
 
 
@@ -81,7 +83,7 @@ async def test_get_repo_config_refreshes(mock_github_client):
     """Should refresh cache when requested."""
 
     # first call
-    await get_repo_config(mock_github_client, "owner/repo")
+    config1, fetched1 = await get_repo_config(mock_github_client, "owner/repo")
 
     # update mock to return different data
     mock_github_client.get_repo_config.return_value = (
@@ -89,10 +91,15 @@ async def test_get_repo_config_refreshes(mock_github_client):
     )
 
     # second call with refresh
-    config = await get_repo_config(mock_github_client, "owner/repo", refresh=True)
+    config2, fetched2 = await get_repo_config(
+        mock_github_client, "owner/repo", refresh=True
+    )
 
-    assert config.dest_org == "new-org"
-    assert config.dest_name == "new-repo"
+    assert config1.dest_org == "owner"
+    assert config2.dest_org == "new-org"
+    assert config2.dest_name == "new-repo"
+    assert fetched1 is True  # first call should fetch
+    assert fetched2 is True  # refresh should also fetch (not use cache)
     # should be called twice due to refresh
     assert mock_github_client.get_repo_config.call_count == 2
 
