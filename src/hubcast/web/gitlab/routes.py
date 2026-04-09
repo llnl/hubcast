@@ -3,6 +3,8 @@ from typing import Any
 
 from gidgetlab import routing, sansio
 
+from hubcast.clients.github.client import GitHubClient
+
 log = logging.getLogger(__name__)
 
 # https://docs.github.com/en/rest/guides/using-the-rest-api-to-interact-with-checks#about-check-suites
@@ -67,7 +69,9 @@ router = GitLabRouter()
 @router.register("Pipeline Hook", status="canceled")
 @router.register("Pipeline Hook", status="skipped")
 @router.register("Pipeline Hook", status="success")
-async def status_relay(event, gh, gh_check_name, *arg, **kwargs):
+async def status_relay(
+    event: sansio.Event, gh: GitHubClient, gh_check_name: str, *arg, **kwargs
+) -> None:
     """Relay status of a GitLab pipeline back to GitHub."""
     # get ref from event
     ref = event.data["object_attributes"]["sha"]

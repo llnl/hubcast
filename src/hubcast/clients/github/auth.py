@@ -1,5 +1,4 @@
 import time
-from typing import Tuple
 
 import aiohttp
 import gidgethub.apps as gha
@@ -27,12 +26,12 @@ class GitHubAuthenticator:
         A string of the numeric GitHub App's ID.
     """
 
-    def __init__(self, requester: str, private_key: str, app_id: str) -> None:
+    def __init__(self, requester: str, private_key: str, app_id: str):
         self.requester = requester
         self.private_key = private_key
         self.app_id = app_id
         self._tokens = TokenCache()
-        self._id_dict = {}
+        self._id_dict: dict[tuple[str, str], str] = {}
 
     async def get_installation_id(self, owner: str, repo: str) -> str:
         if (owner, repo) not in self._id_dict:
@@ -56,7 +55,7 @@ class GitHubAuthenticator:
 
         installation_id = await self.get_installation_id(owner, repo)
 
-        async def renew_installation_token():
+        async def renew_installation_token() -> tuple[int, str]:
             async with aiohttp.ClientSession() as session:
                 gh = gh_aiohttp.GitHubAPI(session, self.requester)
 
@@ -86,7 +85,7 @@ class GitHubAuthenticator:
     async def get_jwt(self) -> str:
         """Get a JWT from cache, creating a new one if necessary."""
 
-        async def renew_jwt() -> Tuple[float, str]:
+        async def renew_jwt() -> tuple[float, str]:
             # GitHub requires that you create a JWT signed with the application's
             # private key. You need the app id and the private key, and you can
             # use this gidgethub method to create the JWT.

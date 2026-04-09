@@ -17,7 +17,7 @@ class GitLabHandler:
         self.webhook_secret = webhook_secret
         self.github_client_factory = github_client_factory
 
-    async def handle(self, request):
+    async def handle(self, request: web.Request) -> web.Response:
         try:
             # read the GitLab webhook payload
             body = await request.read()

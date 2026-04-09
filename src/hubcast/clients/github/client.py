@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 from urllib.parse import urlparse
 
 import aiohttp
@@ -22,19 +23,26 @@ GH_REACTIONS = {
 
 
 class GitHubClientFactory:
-    def __init__(self, app_id, privkey, requester, bot_caller):
+    def __init__(self, app_id: str, privkey: str, requester: str, bot_caller: str):
         self.requester = requester
         self.auth = GitHubAuthenticator(requester, privkey, app_id)
         self.bot_caller = bot_caller
 
-    def create_client(self, repo_owner, repo_name):
+    def create_client(self, repo_owner: str, repo_name: str) -> "GitHubClient":
         return GitHubClient(
             self.auth, self.requester, repo_owner, repo_name, self.bot_caller
         )
 
 
 class GitHubClient:
-    def __init__(self, auth, requester, repo_owner, repo_name, bot_caller):
+    def __init__(
+        self,
+        auth: GitHubAuthenticator,
+        requester: str,
+        repo_owner: str,
+        repo_name: str,
+        bot_caller: str,
+    ):
         self.auth = auth
         self.requester = requester
         self.repo_owner = repo_owner
@@ -46,9 +54,9 @@ class GitHubClient:
         ref: str,
         check_name: str,
         status: str,
-        details_url: str = None,
-        message: str = None,
-    ):
+        details_url: str | None = None,
+        message: str | None = None,
+    ) -> None:
         """
         Set the status of a GitHub check.
 
@@ -120,7 +128,7 @@ class GitHubClient:
                 url = f"/repos/{self.repo_owner}/{self.repo_name}/check-runs/{existing_check['id']}"
                 await gh.patch(url, data=payload)
 
-    async def get_repo_config(self):
+    async def get_repo_config(self) -> str:
         gh_token = await self.auth.authenticate_installation(
             self.repo_owner, self.repo_name
         )
@@ -144,7 +152,7 @@ class GitHubClient:
                     )
                 raise
 
-    async def get_pr(self, id):
+    async def get_pr(self, id: int) -> dict[str, Any]:
         """Return individual PR data."""
         gh_token = await self.auth.authenticate_installation(
             self.repo_owner, self.repo_name
@@ -156,7 +164,7 @@ class GitHubClient:
             url = f"/repos/{self.repo_owner}/{self.repo_name}/pulls/{id}"
             return await gh.getitem(url)
 
-    async def get_prs(self, branch=None):
+    async def get_prs(self, branch: str | None = None) -> list[int] | None:
         """Returns a list of all open PR numbers; can be filtered by internal branches."""
 
         gh_token = await self.auth.authenticate_installation(
@@ -174,8 +182,9 @@ class GitHubClient:
                 url = f"{url}?head={self.repo_owner}:{branch}"
                 prs_res = await gh.getitem(url)
                 return [pr["number"] for pr in prs_res]
+        return None
 
-    async def post_comment(self, issue_number: int, body: str):
+    async def post_comment(self, issue_number: int, body: str) -> None:
         payload = {"body": body}
 
         gh_token = await self.auth.authenticate_installation(
@@ -188,7 +197,7 @@ class GitHubClient:
             url = f"/repos/{self.repo_owner}/{self.repo_name}/issues/{issue_number}/comments"
             await gh.post(url, data=payload)
 
-    async def react_to_comment(self, node_id: str, reaction: str):
+    async def react_to_comment(self, node_id: str, reaction: str) -> None:
         """
         Add an emoji reaction to a GitHub issue comment or PR review.
         See `GH_REACTIONS.keys()` for a list of emoji options.
@@ -218,7 +227,7 @@ class GitHubClient:
                 mutation, subjectId=node_id, content=GH_REACTIONS[reaction]
             )
 
-    async def get_branch(self, name: str):
+    async def get_branch(self, name: str) -> dict[str, Any]:
         """Return individual branch data."""
 
         gh_token = await self.auth.authenticate_installation(

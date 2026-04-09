@@ -1,16 +1,16 @@
 import logging
-from typing import Dict
+from typing import Any
 
 import yaml
 
 from hubcast.clients.github import GitHubClient
 from hubcast.repos.config import RepoConfig
 
-config_cache = dict()
+config_cache: dict[str, RepoConfig] = {}
 log = logging.getLogger(__name__)
 
 
-def create_config(fullname: str, data: Dict) -> RepoConfig:
+def create_config(fullname: str, data: dict[str, Any]) -> RepoConfig:
     return RepoConfig(
         fullname=fullname,
         dest_org=data["Repo"]["owner"],
@@ -20,7 +20,9 @@ def create_config(fullname: str, data: Dict) -> RepoConfig:
     )
 
 
-async def get_repo_config(gh: GitHubClient, fullname: str, refresh: bool = False):
+async def get_repo_config(
+    gh: GitHubClient, fullname: str, refresh: bool = False
+) -> tuple[RepoConfig, bool]:
     fetched = False
     if fullname in config_cache and not refresh:
         config = config_cache[fullname]

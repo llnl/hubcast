@@ -32,7 +32,7 @@ LOG_RECORD_BUILTIN_ATTRS = frozenset(
 
 
 class HubcastJSONFormatter(logging.Formatter):
-    def __init__(self, *, fmt_keys=None):
+    def __init__(self, *, fmt_keys: dict[str, str] | None = None) -> None:
         super().__init__()
         self.fmt_keys = fmt_keys or {}
 

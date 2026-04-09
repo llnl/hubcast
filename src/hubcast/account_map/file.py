@@ -1,5 +1,3 @@
-from typing import Dict, Union
-
 import yaml
 
 from .abc import AccountMap
@@ -24,7 +22,7 @@ class FileMap(AccountMap):
     """
 
     path: str
-    users: Dict[str, str]
+    users: dict[str, str]
 
     def __init__(self, path: str):
         """
@@ -42,7 +40,7 @@ class FileMap(AccountMap):
         except yaml.YAMLError:
             raise FileMapError(f"Failed to parse file map. path={path}")
 
-    def __call__(self, github_user: str) -> Union[str, None]:
+    def __call__(self, github_user: str) -> str | None:
         """
         Return the gitlab_user for a github_user if one exists.
         """

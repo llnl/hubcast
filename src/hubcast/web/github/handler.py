@@ -4,6 +4,10 @@ from aiohttp import web
 from aiojobs.aiohttp import spawn
 from gidgethub import sansio
 
+from hubcast.account_map.abc import AccountMap
+from hubcast.clients.github.client import GitHubClientFactory
+from hubcast.clients.gitlab.client import GitLabClientFactory
+
 from .routes import router
 
 log = logging.getLogger(__name__)
@@ -11,14 +15,18 @@ log = logging.getLogger(__name__)
 
 class GitHubHandler:
     def __init__(
-        self, webhook_secret, account_map, github_client_factory, gitlab_client_factory
+        self,
+        webhook_secret: str,
+        account_map: AccountMap,
+        github_client_factory: GitHubClientFactory,
+        gitlab_client_factory: GitLabClientFactory,
     ):
         self.webhook_secret = webhook_secret
         self.account_map = account_map
         self.gh = github_client_factory
         self.gl = gitlab_client_factory
 
-    async def handle(self, request):
+    async def handle(self, request: web.Request) -> web.Response:
         try:
             # read the GitHub webhook payload
             body = await request.read()
