@@ -7,7 +7,7 @@ spack:
     hubcast: spack/repos/spack_repo/hubcast
   specs:
   - py-pip
-  - py-hubcast
+  - py-hubcast+ldap+tests
   - py-bandit
   - py-ruff
   - py-ty
