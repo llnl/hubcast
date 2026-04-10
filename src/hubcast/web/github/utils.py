@@ -15,6 +15,7 @@ def create_config(fullname: str, data: dict[str, Any]) -> RepoConfig:
         fullname=fullname,
         dest_org=data["Repo"]["owner"],
         dest_name=data["Repo"]["name"],
+        check_name=data["Repo"].get("check_name", "gitlab-ci"),
         draft_sync=data["Repo"].get("draft_sync", True),
         draft_sync_msg=data["Repo"].get("draft_sync_msg", True),
     )
