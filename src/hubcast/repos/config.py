@@ -4,7 +4,7 @@ from typing import Any
 
 @dataclass(slots=True, frozen=True)
 class RepoConfig:
-    """Source Repository Configuration for Mirroring and Status Checks"""
+    """Source repository configuration for mirroring and status checks"""
 
     # destination org and repository to sync into
     dest_org: str
