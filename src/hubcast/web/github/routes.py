@@ -224,8 +224,8 @@ async def sync_pr(
 
     # get the repository configuration from .github/hubcast.yml
     repo_config, _ = await get_repo_config(gh, base_fullname)
-    if not repo_config.draft_sync and pull_request["draft"]:
-        if repo_config.draft_sync_msg:
+    if not repo_config.sync_drafts and pull_request["draft"]:
+        if repo_config.sync_drafts_msg:
             await gh.set_check_status(
                 want_sha,
                 repo_config.check_name,
