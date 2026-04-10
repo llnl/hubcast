@@ -39,6 +39,10 @@ class GitHubHandler:
                 extra={"event_type": event.event, "delivery_id": event.delivery_id},
             )
 
+            # GitHub will notify when a repo installs the Hubcast app; we don't need to handle
+            if event.event in ("installation", "installation_repositories"):
+                return web.Response(status=200)
+
             github_user = event.data["sender"]["login"]
             gitlab_user = self.account_map(github_user)
 
