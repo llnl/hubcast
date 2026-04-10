@@ -224,8 +224,8 @@ async def sync_pr(
 
     # get the repository configuration from .github/hubcast.yml
     repo_config, _ = await get_repo_config(gh, base_fullname)
-    if not repo_config.draft_sync and pull_request["draft"]:
-        if repo_config.draft_sync_msg:
+    if not repo_config.sync_drafts and pull_request["draft"]:
+        if repo_config.sync_drafts_msg:
             await gh.set_check_status(
                 want_sha,
                 repo_config.check_name,
@@ -325,6 +325,12 @@ async def remove_pr(
     src_fullname = pull_request["head"]["repo"]["full_name"]
     base_fullname = pull_request["base"]["repo"]["full_name"]
 
+    # get the repository configuration from .github/hubcast.yml
+    repo_config, _ = await get_repo_config(gh, base_fullname)
+
+    if not repo_config.delete_closed:
+        return
+
     # if the pull request comes from a fork we should clean up
     # the branch upon closing or merging the PR. However, if the
     # pull request comes from an internal branch we should wait
@@ -336,9 +342,6 @@ async def remove_pr(
 
     pull_request_id = pull_request["number"]
     target_ref = f"refs/heads/pr-{pull_request_id}"
-
-    # get the repository configuration from .github/hubcast.yml
-    repo_config, _ = await get_repo_config(gh, base_fullname)
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"

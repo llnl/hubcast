@@ -15,6 +15,7 @@ from hubcast.clients.gitlab import GitLabClientFactory
 from hubcast.config import Config, ConfigError
 from hubcast.web.github import GitHubHandler
 from hubcast.web.gitlab import GitLabHandler
+from hubcast.web.health import health_check
 
 try:
     from hubcast.account_map import LDAPMap
@@ -135,6 +136,7 @@ def main():
 
     log.info("Starting HTTP server")
 
+    app.router.add_get("/health", health_check)
     app.router.add_post("/v1/events/src/github", gh_handler.handle)
     app.router.add_post("/v1/events/dest/gitlab", gl_handler.handle)
 
