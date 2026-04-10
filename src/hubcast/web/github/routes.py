@@ -81,9 +81,10 @@ async def sync_branch(
             "gh_check": repo_config.check_name,
         }
         await gl.set_webhook(dest_fullname, webhook_data)
-    gl_token = await gl.auth.authenticate_user(gl_user)
 
     # sync commits from GitHub -> GitLab
+    gl_token = await gl.auth.authenticate_user(gl_user)
+
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     have_shas = set(gl_refs.values())
     from_sha = gl_refs.get(target_ref) or ("0" * 40)
@@ -95,6 +96,16 @@ async def sync_branch(
         )
         return
 
+    log.info(
+        "Mirroring refs",
+        extra={
+            "repo": src_fullname,
+            "ref": target_ref,
+            "from_sha": from_sha,
+            "want_sha": want_sha,
+        },
+    )
+
     gh_token = await gh.auth.authenticate_installation(gh.repo_owner, gh.repo_name)
 
     packfile = await fetch_pack(
@@ -105,14 +116,6 @@ async def sync_branch(
         password=gh_token,
     )
 
-    log.info(
-        "Mirroring refs",
-        extra={
-            "repo": src_fullname,
-            "from_sha": from_sha,
-            "want_sha": want_sha,
-        },
-    )
     await send_pack(
         dest_remote_url,
         target_ref,
@@ -121,6 +124,16 @@ async def sync_branch(
         packfile,
         username=gl_user,
         password=gl_token,
+    )
+
+    log.info(
+        "Successfully mirrored refs",
+        extra={
+            "repo": src_fullname,
+            "ref": target_ref,
+            "from_sha": from_sha,
+            "want_sha": want_sha,
+        },
     )
 
 
@@ -140,6 +153,7 @@ async def remove_branch(
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
+
     gl_token = await gl.auth.authenticate_user(gl_user)
 
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
@@ -147,6 +161,7 @@ async def remove_branch(
     null_sha = "0" * 40
 
     log.info("Deleting ref", extra={"repo": src_fullname, "target_ref": target_ref})
+
     await send_pack(
         dest_remote_url,
         target_ref,
@@ -155,6 +170,11 @@ async def remove_branch(
         b"",
         username=gl_user,
         password=gl_token,
+    )
+
+    log.info(
+        "Successfully deleted ref",
+        extra={"repo": src_fullname, "target_ref": target_ref},
     )
 
 
@@ -388,18 +408,27 @@ async def respond_comment(
 
     elif re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
         # TODO when docs PR is merged add a link to the image showing the review process
-        response = "To approve the sync of this PR, please use the GitHub review feature to submit an approval. This ensures the approval is tied to a specific commit to avoid unintended syncing of malicious commits."
+        response = (
+            "To approve the sync of this PR, please use the GitHub review feature "
+            "to submit an approval. This ensures the approval is tied to a specific "
+            "commit to avoid unintended syncing of malicious commits."
+        )
 
     elif re.search(
         f"{gh.bot_caller} (re[-]?)?(run|start) pipeline", comment, re.IGNORECASE
     ):
-        # allows a project maintainer to restart the pipeline for a PR; should be used for issues unrelated for code changes
-        # this process will not sync changes, as an external collaborator could submit malicious changes and trigger a sync without explicit approval on the commit hash (see `respond_pr_comment`)
+        # allows a project maintainer to restart the pipeline for a PR; should be
+        # used for issues unrelated for code changes
+        # this process will not sync changes, as an external collaborator could
+        # submit malicious changes and trigger a sync without explicit approval
+        # on the commit hash (see `respond_pr_comment`)
         pull_request_id = event.data["issue"]["number"]
         pull_request = await gh.get_pr(pull_request_id)
+
         # get the branch this PR belongs to
         src_fullname = pull_request["head"]["repo"]["full_name"]
         base_fullname = pull_request["base"]["repo"]["full_name"]
+
         # pull requests coming from forks are pushed as branches in the form of
         # pr-<pr-number> instead of as their branch name as conflicts could occur
         # between multiple repositories
@@ -423,11 +452,11 @@ async def respond_comment(
     elif re.search(
         f"{gh.bot_caller} restart failed(?:[- ]?jobs)?", comment, re.IGNORECASE
     ):
-        pull_request_id = event.data["issue"]["number"]
-        pull_request = await gh.get_pr(pull_request_id)
         # if a pipeline failed, we give the user the option to restart any failed jobs
         # we don't want to re-sync the branch, as a new pipeline would be created
         # and would defeat the purpose of individually restarting failed jobs
+        pull_request_id = event.data["issue"]["number"]
+        pull_request = await gh.get_pr(pull_request_id)
 
         # get the branch this PR belongs to
         src_fullname = pull_request["head"]["repo"]["full_name"]
