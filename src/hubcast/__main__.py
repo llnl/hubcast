@@ -1,8 +1,8 @@
 import json
 import logging
 import logging.config
-import os
 import sys
+from pathlib import Path
 
 from aiohttp import web
 from aiojobs.aiohttp import setup
@@ -29,6 +29,35 @@ log = logging.getLogger(__name__)
 # Set requester for both GitHub and GitLab clients to
 # identify Hubcast via the user-agent header
 REQUESTER = "hubcast"
+
+
+def initialize_logging(conf: Config) -> None:
+    """Initialize logging based on configuration."""
+    if not conf.logging_config_path:
+        logging.basicConfig(level=logging.INFO)
+        return
+
+    config_path = Path(conf.logging_config_path)
+    if not config_path.exists():
+        log.error(
+            "Logging config file not found",
+            extra={"path": conf.logging_config_path},
+        )
+        sys.exit(1)
+
+    try:
+        logging_config = json.loads(config_path.read_text())
+        logging.config.dictConfig(logging_config)
+    except (
+        json.JSONDecodeError,
+        # calls to logging.config.dictConfig will raise the following exceptions (cf stdlib docs):
+        ValueError,
+        TypeError,
+        AttributeError,
+        ImportError,
+    ) as exc:
+        log.error(exc)
+        sys.exit(1)
 
 
 def initialize_account_map(conf: Config) -> AccountMap:
@@ -76,23 +105,7 @@ def main():
         log.error(exc)
         sys.exit(1)
 
-    if os.path.exists(conf.logging_config_path):
-        try:
-            with open(conf.logging_config_path) as f:
-                logging_config = json.load(f)
-            logging.config.dictConfig(logging_config)
-        except (
-            json.decoder.JSONDecodeError,
-            # calls to logging.config.dictConfig will raise the following exceptions (cf stdlib docs):
-            ValueError,
-            TypeError,
-            AttributeError,
-            ImportError,
-        ) as exc:
-            log.error(exc)
-            sys.exit(1)
-    else:
-        logging.basicConfig(level=logging.INFO)
+    initialize_logging(conf)
 
     account_map = initialize_account_map(conf)
 
