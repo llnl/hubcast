@@ -39,7 +39,8 @@ def main():
         log.error(exc)
         sys.exit(1)
 
-    if os.path.exists(conf.logging_config_path):
+    logging_config_path = conf.logging_config_path
+    if logging_config_path and os.path.exists(logging_config_path):
         try:
             with open(conf.logging_config_path) as f:
                 logging_config = json.load(f)
