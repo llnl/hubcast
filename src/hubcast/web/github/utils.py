@@ -1,5 +1,4 @@
 import logging
-from typing import Any
 
 import yaml
 
@@ -10,21 +9,24 @@ config_cache: dict[str, RepoConfig] = {}
 log = logging.getLogger(__name__)
 
 
-def create_config(fullname: str, data: dict[str, Any]) -> RepoConfig:
-    return RepoConfig(
-        fullname=fullname,
-        dest_org=data["Repo"]["owner"],
-        dest_name=data["Repo"]["name"],
-        check_name=data["Repo"].get("check_name", "gitlab-ci"),
-        delete_closed=data["Repo"].get("delete_closed", True),
-        sync_drafts=data["Repo"].get("sync_drafts", True),
-        sync_drafts_msg=data["Repo"].get("sync_drafts_msg", True),
-    )
-
-
 async def get_repo_config(
     gh: GitHubClient, fullname: str, refresh: bool = False
 ) -> tuple[RepoConfig, bool]:
+    """Get repository configuration from cache or fetch from GitHub.
+
+    Args:
+        gh: GitHub client instance
+        fullname: Full repository name (e.g., "owner/repo")
+        refresh: Whether to force refresh from GitHub
+
+    Returns:
+        Tuple of (RepoConfig instance, whether it was freshly fetched)
+
+    Raises:
+        yaml.YAMLError: If config file contains invalid YAML
+        KeyError: If config is missing required top-level "Repo" key
+        ValueError: If config is missing required fields
+    """
     fetched = False
     if fullname in config_cache and not refresh:
         config = config_cache[fullname]
@@ -33,19 +35,27 @@ async def get_repo_config(
 
         try:
             config_yaml = yaml.safe_load(config_str)
-        except yaml.YAMLError:
-            log.info(
-                "Repo config is invalid YAML",
+        except yaml.YAMLError as exc:
+            log.error(
+                f"Repo config is invalid YAML: {exc}",
                 extra={"repo_owner": gh.repo_owner, "repo_name": gh.repo_name},
             )
+            raise
 
         try:
-            config = create_config(fullname, config_yaml)
+            config = RepoConfig.from_yaml_data(config_yaml["Repo"])
         except KeyError as exc:
-            log.info(
-                f"Repo config is missing required fields: {exc}",
+            log.error(
+                f"Repo config is missing required top-level key: {exc}",
                 extra={"repo_owner": gh.repo_owner, "repo_name": gh.repo_name},
             )
+            raise
+        except ValueError as exc:
+            log.error(
+                f"Repo config is invalid: {exc}",
+                extra={"repo_owner": gh.repo_owner, "repo_name": gh.repo_name},
+            )
+            raise
 
         config_cache[fullname] = config
         fetched = True
