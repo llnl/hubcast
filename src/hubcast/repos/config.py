@@ -6,16 +6,28 @@ from typing import Any
 class RepoConfig:
     """Configuration for a GitHub repository's GitLab sync settings."""
 
-    dest_org: str  # GitLab destination organization
-    dest_name: str  # GitLab destination repository name
-    check_name: str = "gitlab-ci"  # Name of the GitHub check to create
-    check_type: str = "pipeline"  # TODO: Type of check (not yet used)
-    create_mr: bool = (
-        False  # TODO: Whether to create merge requests (not yet implemented)
-    )
-    delete_closed: bool = True  # Whether to delete branches for closed PRs
-    sync_drafts: bool = True  # Whether to sync draft pull requests
-    sync_drafts_msg: bool = True  # Whether to show message when skipping drafts
+    # destination org and repository to sync into
+    dest_org: str
+    dest_name: str
+
+    # name of the CI check that is reported back the the source
+    check_name: str = "gitlab-ci"
+
+    # Whether or not to delete PR branches when the corresponding PR
+    # is closed or merged (default is True)
+    delete_closed: bool = True
+
+    # Whether or not to sync draft PRs (default is True)
+    sync_drafts: bool = True
+    sync_drafts_msg: bool = True
+
+    # TODO: allow users to control the granularity of checks reported to GitHub
+    # via setting either "pipeline" or "job"
+    check_type: str = "pipeline"
+
+    # TODO: create GitLab MRs that mirror GitHub PRs to allow users to test
+    # synthetic merge commits between the branch and the default branch
+    create_mr: bool = False
 
     @classmethod
     def from_yaml_data(cls, repo_data: dict[str, Any]) -> "RepoConfig":
