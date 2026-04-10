@@ -4,7 +4,7 @@ from typing import Any
 
 @dataclass(slots=True, frozen=True)
 class RepoConfig:
-    """Configuration for a GitHub repository's GitLab sync settings."""
+    """Source Repository Configuration for Mirroring and Status Checks"""
 
     # destination org and repository to sync into
     dest_org: str
