@@ -8,6 +8,7 @@ from aiohttp import web
 from aiojobs.aiohttp import setup
 
 from hubcast.account_map import FileMap
+from hubcast.account_map.abc import AccountMap
 from hubcast.account_map.file import FileMapError
 from hubcast.clients.github import GitHubClientFactory
 from hubcast.clients.gitlab import GitLabClientFactory
@@ -28,6 +29,42 @@ log = logging.getLogger(__name__)
 # Set requester for both GitHub and GitLab clients to
 # identify Hubcast via the user-agent header
 REQUESTER = "hubcast"
+
+
+def initialize_account_map(conf: Config) -> AccountMap:
+    """Initialize and return the appropriate account map based on config."""
+    match conf.account_map_type:
+        case "file":
+            try:
+                return FileMap(conf.account_map_path)
+            except FileMapError:
+                log.exception("Error initializing file account map")
+                sys.exit(1)
+
+        case "ldap":
+            if not LDAP_AVAILABLE:
+                log.error(
+                    "LDAP account map requested but python-ldap is not installed. "
+                    "Install hubcast with the ldap extra: pip install hubcast[ldap] "
+                    "or: spack install hubcast+ldap"
+                )
+                sys.exit(1)
+            return LDAPMap(
+                conf.ldap_map_uri,
+                conf.ldap_map_base,
+                conf.ldap_map_input,
+                conf.ldap_map_output,
+                conf.ldap_map_scope,
+                conf.ldap_map_bind_dn,
+                conf.ldap_map_bind_password,
+            )
+
+        case _:
+            log.error(
+                "Unknown account map type",
+                extra={"account_map_type": conf.account_map_type},
+            )
+            sys.exit(1)
 
 
 def main():
@@ -57,36 +94,7 @@ def main():
     else:
         logging.basicConfig(level=logging.INFO)
 
-    # error if we're unable to initialize an account map
-    if conf.account_map_type == "file":
-        try:
-            account_map = FileMap(conf.account_map_path)
-        except FileMapError:
-            log.exception("Error initializing file account map")
-            sys.exit(1)
-    elif conf.account_map_type == "ldap":
-        if not LDAP_AVAILABLE:
-            log.error(
-                "LDAP account map requested but python-ldap is not installed. "
-                "Install hubcast with the ldap extra: pip install hubcast[ldap]"
-                "or: spack install hubcast+ldap"
-            )
-            sys.exit(1)
-        account_map = LDAPMap(
-            conf.ldap_map_uri,
-            conf.ldap_map_base,
-            conf.ldap_map_input,
-            conf.ldap_map_output,
-            conf.ldap_map_scope,
-            conf.ldap_map_bind_dn,
-            conf.ldap_map_bind_password,
-        )
-    else:
-        log.error(
-            "Unknown account map type",
-            extra={"account_map_type": conf.account_map_type},
-        )
-        sys.exit(1)
+    account_map = initialize_account_map(conf)
 
     gh_client_factory = GitHubClientFactory(
         conf.gh.app_id, conf.gh.privkey, REQUESTER, conf.gh.bot_caller
