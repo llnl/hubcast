@@ -11,7 +11,7 @@ class Config:
 
         self.account_map_type = env_get("HC_ACCOUNT_MAP_TYPE")
 
-        self.logging_config_path = env_get("HC_LOGGING_CONFIG_PATH")
+        self.logging_config_path = env_get("HC_LOGGING_CONFIG_PATH", optional=True)
 
         if self.account_map_type == "file":
             self.account_map_path = env_get("HC_ACCOUNT_MAP_PATH")
