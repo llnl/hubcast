@@ -15,6 +15,7 @@ def create_config(fullname: str, data: dict[str, Any]) -> RepoConfig:
         fullname=fullname,
         dest_org=data["Repo"]["owner"],
         dest_name=data["Repo"]["name"],
+        delete_closed=data["Repo"].get("delete_closed", True),
         sync_drafts=data["Repo"].get("sync_drafts", True),
         sync_drafts_msg=data["Repo"].get("sync_drafts_msg", True),
     )
