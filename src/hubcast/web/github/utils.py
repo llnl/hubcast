@@ -35,9 +35,9 @@ async def get_repo_config(
 
         try:
             config_yaml = yaml.safe_load(config_str)
-        except yaml.YAMLError as exc:
-            log.error(
-                f"Repo config is invalid YAML: {exc}",
+        except yaml.YAMLError:
+            log.exception(
+                f"Repo config is invalid YAML",
                 extra={"repo_owner": gh.repo_owner, "repo_name": gh.repo_name},
             )
             raise
@@ -45,14 +45,14 @@ async def get_repo_config(
         try:
             config = RepoConfig.from_yaml_data(config_yaml["Repo"])
         except KeyError as exc:
-            log.error(
-                f"Repo config is missing required top-level key: {exc}",
+            log.exception(
+                f"Repo config is missing required top-level key,
                 extra={"repo_owner": gh.repo_owner, "repo_name": gh.repo_name},
             )
             raise
-        except ValueError as exc:
-            log.error(
-                f"Repo config is invalid: {exc}",
+        except ValueError:
+            log.exception(
+                f"Repo config is invalid",
                 extra={"repo_owner": gh.repo_owner, "repo_name": gh.repo_name},
             )
             raise
