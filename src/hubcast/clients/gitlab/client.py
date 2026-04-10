@@ -1,6 +1,5 @@
 import logging
 import urllib.parse
-from typing import Dict
 
 import aiohttp
 import gidgetlab
@@ -33,7 +32,7 @@ class GitLabClientFactory:
         self.callback_url = callback_url
         self.webhook_secret = webhook_secret
 
-    def create_client(self, user: str):
+    def create_client(self, user: str) -> "GitLabClient":
         """creates a GitLabClient for a specific user"""
         return GitLabClient(
             self.auth,
@@ -48,7 +47,7 @@ class GitLabClientFactory:
 class GitLabClient:
     def __init__(
         self,
-        auth: GitLabAuthenticator,
+        auth: GitLabAuthenticator | GitLabSingleUserAuthenticator,
         requester: str,
         instance_url: str,
         callback_url: str,
@@ -62,7 +61,7 @@ class GitLabClient:
         self.webhook_secret = webhook_secret
         self.user = user
 
-    async def set_webhook(self, gl_fullname: str, data: Dict):
+    async def set_webhook(self, gl_fullname: str, data: dict[str, str]) -> None:
         gl_token = await self.auth.authenticate_user(username=self.user)
 
         new_hook = {

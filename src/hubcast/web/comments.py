@@ -1,4 +1,4 @@
-def help_message(bot_caller: str):
+def help_message(bot_caller: str) -> str:
     return f"""
 You can interact with me in many ways!
 

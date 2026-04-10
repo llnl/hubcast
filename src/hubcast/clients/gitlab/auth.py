@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-from typing import Tuple
 
 import aiohttp
 import gidgetlab.aiohttp
@@ -35,7 +34,7 @@ class GitLabAuthenticator:
     async def authenticate_user(
         self,
         username: str,
-        scopes: list = GL_SCOPES,
+        scopes: list[str] = GL_SCOPES,
         expire_days: int = 1,
     ) -> str:
         """
@@ -53,7 +52,7 @@ class GitLabAuthenticator:
             the number of days after which the token will expire on the gitlab server
         """
 
-        async def renew_impersonation_token():
+        async def renew_impersonation_token() -> tuple[int, str]:
             # the tokens API requires user IDs, but hubcast's account mapping returns usernames
             user_id = await self._get_user_id(username)
 
@@ -102,7 +101,7 @@ class GitLabAuthenticator:
             return res[0]["id"]
 
     @staticmethod
-    def _date_after_days(days: int) -> Tuple[str, int]:
+    def _date_after_days(days: int) -> tuple[str, int]:
         """Returns UTC date string in YYYY-MM-DD format and midnight UTC timestamp."""
         dt = (datetime.now(timezone.utc) + timedelta(days=days)).replace(
             hour=0, minute=0, second=0, microsecond=0

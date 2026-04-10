@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Union
 
 
 class AccountMap(ABC):
@@ -8,7 +7,7 @@ class AccountMap(ABC):
     """
 
     @abstractmethod
-    def __call__(self, github_user: str) -> Union[str, None]:
+    def __call__(self, github_user: str) -> str | None:
         """
         Return the coorisponding gitlab_user for a given github_user if
         one exists.

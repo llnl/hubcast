@@ -1,6 +1,6 @@
 import logging
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Optional, Union
 
 import ldap
 import ldap.sasl
@@ -14,7 +14,7 @@ ldap.set_option(ldap.OPT_NETWORK_TIMEOUT, 5)
 
 
 @contextmanager
-def ldap_connection(uri: str):
+def ldap_connection(uri: str) -> Generator[ldap.ldapobject.LDAPObject, None, None]:
     """
     Manages context for python-ldap connections.
     Yields the connection and unbinds on exit.
@@ -47,9 +47,9 @@ class LDAPMap(AccountMap):
         the attribute to select as output, eg: uid
     search_scope : int
         one of ldap.SCOPE_BASE, ldap.SCOPE_ONELEVEL, ldap.SCOPE_SUBTREE
-    bind_dn : Optional[str]
+    bind_dn : str | None
         optional DN for simple bind (falls back to GSSAPI if None)
-    bind_password : Optional[str]
+    bind_password : str | None
         password for simple bind (ignored when using GSSAPI)
     """
 
@@ -60,8 +60,8 @@ class LDAPMap(AccountMap):
         input_attr: str,
         output_attr: str,
         search_scope: int,
-        bind_dn: Optional[str] = None,
-        bind_password: Optional[str] = None,
+        bind_dn: str | None = None,
+        bind_password: str | None = None,
     ):
         self.uri = uri
         self.search_base = search_base
@@ -71,7 +71,7 @@ class LDAPMap(AccountMap):
         self.bind_dn = bind_dn
         self.bind_password = bind_password
 
-    def __call__(self, input_val: str) -> Union[str, None]:
+    def __call__(self, input_val: str) -> str | None:
         """
         searches the LDAP endpoint for input_val within the search_base and returns
         the value of output_attr.

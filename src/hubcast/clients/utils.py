@@ -1,5 +1,5 @@
 import time
-from typing import Awaitable, Callable, Tuple
+from typing import Awaitable, Callable
 
 
 class TokenCache:
@@ -7,13 +7,13 @@ class TokenCache:
     Cache for web tokens with an expiration.
     """
 
-    def __init__(self) -> None:
-        self._tokens = {}
+    def __init__(self):
+        self._tokens: dict[str, tuple[float, str]] = {}
 
     async def get(
         self,
         name: str,
-        renew: Callable[[], Awaitable[Tuple[float, str]]],
+        renew: Callable[[], Awaitable[tuple[float, str]]],
         time_needed: int = 60,
     ) -> str:
         """
@@ -23,7 +23,7 @@ class TokenCache:
         ---------
         name: str
             An identifying name of a token to get from the cache.
-        renew: Callable[[], Awaitable[Tuple[float, str]]]
+        renew: Callable[[], Awaitable[tuple[float, str]]]
             A function to call in order to generate a new token if the cache
             is stale.
         time_needed: int

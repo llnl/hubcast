@@ -50,7 +50,7 @@ class GitLabConfig:
         self.callback_url = env_get("HC_GL_CALLBACK_URL")
 
 
-def env_get(key: str, default=None, optional: bool = False):
+def env_get(key: str, default: str | None = None, optional: bool = False) -> str | None:
     """
     Retrieve environment variables.
 

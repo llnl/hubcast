@@ -5,6 +5,8 @@ from typing import Any
 from gidgethub import routing, sansio
 from repligit.asyncio import fetch_pack, ls_remote, send_pack
 
+from hubcast.clients.github.client import GitHubClient
+from hubcast.clients.gitlab.client import GitLabClient
 from hubcast.web import comments
 from hubcast.web.github.utils import get_repo_config
 
@@ -40,7 +42,14 @@ router = GitHubRouter()
 # Push Events
 # -----------------------------------
 @router.register("push", deleted=False)
-async def sync_branch(event, gh, gl, gl_user, *arg, **kwargs):
+async def sync_branch(
+    event: sansio.Event,
+    gh: GitHubClient,
+    gl: GitLabClient,
+    gl_user: str,
+    *arg,
+    **kwargs,
+) -> None:
     """Sync the git branch referenced to GitLab."""
     src_repo_url = event.data["repository"]["clone_url"]
     src_fullname = event.data["repository"]["full_name"]
@@ -116,7 +125,14 @@ async def sync_branch(event, gh, gl, gl_user, *arg, **kwargs):
 
 
 @router.register("push", deleted=True)
-async def remove_branch(event, gh, gl, gl_user, *arg, **kwargs):
+async def remove_branch(
+    event: sansio.Event,
+    gh: GitHubClient,
+    gl: GitLabClient,
+    gl_user: str,
+    *arg,
+    **kwargs,
+) -> None:
     src_fullname = event.data["repository"]["full_name"]
     target_ref = event.data["ref"]
 
@@ -147,7 +163,14 @@ async def remove_branch(event, gh, gl, gl_user, *arg, **kwargs):
 # -----------------------------------
 
 
-async def sync_pr(pull_request, gh, gl, gl_user, src_repo_private, want_sha):
+async def sync_pr(
+    pull_request: dict[str, Any],
+    gh: GitHubClient,
+    gl: GitLabClient,
+    gl_user: str,
+    src_repo_private: bool,
+    want_sha: str,
+) -> None:
     """Sync the git fork/branch referenced in a PR to GitLab.
 
     This isn't technically an event handler, but is used a couple different ways in this file.
@@ -249,7 +272,14 @@ async def sync_pr(pull_request, gh, gl, gl_user, src_repo_private, want_sha):
 @router.register("pull_request", action="opened")
 @router.register("pull_request", action="reopened")
 @router.register("pull_request", action="synchronize")
-async def sync_pr_event(event, gh, gl, gl_user, *arg, **kwargs):
+async def sync_pr_event(
+    event: sansio.Event,
+    gh: GitHubClient,
+    gl: GitLabClient,
+    gl_user: str,
+    *arg,
+    **kwargs,
+) -> None:
     """Sync the git fork/branch referenced in a PR to GitLab."""
     pull_request = event.data["pull_request"]
     src_repo_private = pull_request["head"]["repo"]["private"]
@@ -263,7 +293,14 @@ async def sync_pr_event(event, gh, gl, gl_user, *arg, **kwargs):
 
 
 @router.register("pull_request", action="closed")
-async def remove_pr(event, gh, gl, gl_user, *arg, **kwargs):
+async def remove_pr(
+    event: sansio.Event,
+    gh: GitHubClient,
+    gl: GitLabClient,
+    gl_user: str,
+    *arg,
+    **kwargs,
+) -> None:
     pull_request = event.data["pull_request"]
     src_fullname = pull_request["head"]["repo"]["full_name"]
     base_fullname = pull_request["base"]["repo"]["full_name"]
@@ -304,7 +341,14 @@ async def remove_pr(event, gh, gl, gl_user, *arg, **kwargs):
 
 
 @router.register("pull_request_review", action="submitted")
-async def respond_pr_comment(event, gh, gl, gl_user, *arg, **kwargs):
+async def respond_pr_comment(
+    event: sansio.Event,
+    gh: GitHubClient,
+    gl: GitLabClient,
+    gl_user: str,
+    *arg,
+    **kwargs,
+) -> None:
     comment = event.data["review"]["body"]
 
     if re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
@@ -323,7 +367,14 @@ async def respond_pr_comment(event, gh, gl, gl_user, *arg, **kwargs):
 
 
 @router.register("issue_comment", action="created")
-async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
+async def respond_comment(
+    event: sansio.Event,
+    gh: GitHubClient,
+    gl: GitLabClient,
+    gl_user: str,
+    *arg,
+    **kwargs,
+) -> None:
     # differentiate issue vs PR comment
     if "pull_request" not in event.data["issue"]:
         return
@@ -416,7 +467,14 @@ async def respond_comment(event, gh, gl, gl_user, *arg, **kwargs):
 
 
 @router.register("check_run", action="rerequested")
-async def rerun_check(event, gh, gl, gl_user, *arg, **kwargs):
+async def rerun_check(
+    event: sansio.Event,
+    gh: GitHubClient,
+    gl: GitLabClient,
+    gl_user: str,
+    *arg,
+    **kwargs,
+) -> None:
     """
     Handles a user re-running a check run for the latest commit in the branch.
     See https://docs.github.com/en/webhooks/webhook-events-and-payloads?actionType=rerequested#check_run.
