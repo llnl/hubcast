@@ -1,12 +1,9 @@
-import logging
-
 import yaml
 
 from hubcast.clients.github import GitHubClient
 from hubcast.repos.config import RepoConfig
 
 config_cache: dict[str, RepoConfig] = {}
-log = logging.getLogger(__name__)
 
 
 async def get_repo_config(
@@ -35,27 +32,15 @@ async def get_repo_config(
 
         try:
             config_yaml = yaml.safe_load(config_str)
-        except yaml.YAMLError:
-            log.exception(
-                "Repo config is invalid YAML",
-                extra={"repo_owner": gh.repo_owner, "repo_name": gh.repo_name},
-            )
-            raise
+        except yaml.YAMLError as e:
+            raise yaml.YAMLError(f"Invalid YAML in repo config for {fullname}") from e
 
         try:
             config = RepoConfig.from_yaml_data(config_yaml["Repo"])
-        except KeyError:
-            log.exception(
-                "Repo config is missing required top-level key",
-                extra={"repo_owner": gh.repo_owner, "repo_name": gh.repo_name},
-            )
-            raise
-        except ValueError:
-            log.exception(
-                "Repo config is invalid",
-                extra={"repo_owner": gh.repo_owner, "repo_name": gh.repo_name},
-            )
-            raise
+        except KeyError as e:
+            raise KeyError(f"Repo config for {fullname} is missing required key: {e}") from e
+        except ValueError as e:
+            raise ValueError(f"Invalid repo config for {fullname}: {e}") from e
 
         config_cache[fullname] = config
         fetched = True
