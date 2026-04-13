@@ -180,8 +180,9 @@ def mock_repligit_ops():
         default_config = Mock(
             dest_org="owner",
             dest_name="repo",
-            draft_sync=True,
-            draft_sync_msg=True,
+            sync_drafts=True,
+            sync_drafts_msg=True,
+            delete_closed=True,
         )
         mock_get_config.return_value = (default_config, True)
 
@@ -319,11 +320,11 @@ async def test_sync_pr_skip_private_fork(
 
 @pytest.mark.asyncio
 async def test_sync_pr_skip_draft(mock_pr_event, mock_gh, mock_gl, mock_repligit_ops):
-    """PR sync should be skipped for draft PRs (when draft_sync is False)."""
+    """PR sync should be skipped for draft PRs (when sync_drafts is False)."""
 
     mock_pr_event.data["pull_request"]["draft"] = True
     mock_repligit_ops["get_repo_config"].return_value = (
-        Mock(draft_sync=False, dest_org="owner", dest_name="repo"),
+        Mock(sync_drafts=False, dest_org="owner", dest_name="repo"),
         True,
     )
 
