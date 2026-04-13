@@ -38,7 +38,9 @@ async def get_repo_config(
         try:
             config = RepoConfig.from_yaml_data(config_yaml["Repo"])
         except KeyError as e:
-            raise KeyError(f"Repo config for {fullname} is missing required key: {e}") from e
+            raise KeyError(
+                f"Repo config for {fullname} is missing required key: {e}"
+            ) from e
         except ValueError as e:
             raise ValueError(f"Invalid repo config for {fullname}: {e}") from e
 
