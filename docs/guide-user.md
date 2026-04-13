@@ -34,8 +34,8 @@ To proceed with the default settings for your repo, copy the following contents 
 
 ```yaml
 Repo:
-  owner: example
-  name: hubcast-test
+  dest_org: example
+  dest_name: hubcast-test
 ```
 
 Note: Hubcast will search for these settings in the HEAD of the source repository's default branch.
