@@ -4,21 +4,21 @@
 <br clear="all">
 </h1>
 
-**[Features] &nbsp; • &nbsp; [Getting Started] &nbsp; • &nbsp; [Config] &nbsp; • &nbsp; [Contributing] &nbsp; • &nbsp; [Changelog]**
+**[Features] &nbsp; • &nbsp; [Documentation] &nbsp; • &nbsp; [Contributing] &nbsp; • &nbsp; [Changelog]**
 
 [Features]: #features
-[Getting Started]: /docs/getting-started.md
-[Config]: /docs/getting-started.md
+[Documentation]: /docs/readme.md
 [Contributing]: /docs/CONTRIBUTING.md
 [Changelog]: https://github.com/LLNL/hubcast/releases
 
 </div>
 
-Hubcast is an event driven synchronization application for bridging GitHub and GitLab. It automates various workflow tasks and handles jobs like:
+## Features
 
-- Syncing branches from GitHub to GitLab.
-- Reporting CI job statuses back to GitHub from GitLab Workflow Runs.
+Hubcast is a secure, event-driven synchronization application for bridging Git forges. It automates various workflow tasks and handles jobs like:
 
+- Syncing branches between Git forges (e.g., GitHub -> GitLab)
+- Reporting CI job statuses back to GitHub from GitLab Pipeline Runs.
 
 ## License
 

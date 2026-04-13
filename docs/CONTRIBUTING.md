@@ -1,7 +1,8 @@
 # Contributing
+
 ## Introduction
 Hubcast welcomes contributions via [Pull Requests](https://github.com/LLNL/hubcast/pulls).
-We've labeled beginner friendly (good first issue) tasks in the issue tracker, feel free
+We've labeled beginner friendly (good first issue) tasks in the issue tracker. Feel free
 to reach out and ask for help when getting started.
 
 For small changes (e.g. bug fixes), feel free to submit a PR.
@@ -11,25 +12,19 @@ For larger architectural changes and new features, consider opening an
 proposed contribution.
 
 ## Prerequisites
-Hubcast is written in python. You'll need a version of python and pip to
-install the required dependencies and nodejs to install the
+Hubcast is written in Python. You'll need a version of Python and pip to
+install the required dependencies and Node.js to install the
 [smee-client](https://www.npmjs.com/package/smee-client) to test the application locally.
 
-You can install the full development environment using [Spack](spack-develop.md).
+You can install the full development environment using [Spack](/docs/guide-developer.md#development-environment).
 
 ## Development
-After cloning the repository you'll need to follow the [Getting Started](getting-started.md)
-documentation to setup a testing,
-1. GitHub Repo
-2. GitHub App
-3. GitLab Repo
-4. GitLab Repo Webhook
-5. GitLab Repo Access Token
+After cloning the Hubcast repository, we recommend reading through the [documentation](/docs/readme.md) and each guide ([admin](/docs/guide-admin.md), [user](/docs/guide-user.md), [developer](/docs/guide-developer.md)) to understand how to use Hubcast and set up your local environment.
 
 > [!TIP]
 > If you're developing locally you can use [smee.io](https://smee.io) to relay
-> webhooks to your local machine. Just click "Start a new channel" & then run
-> the following substituting your channel url as the argument and GitHub App
+> webhooks to your local machine. Just click "start a new channel" and then run
+> the following, substituting your channel url as the argument and GitHub App
 > endpoint.
 >
 > ```bash
@@ -42,17 +37,18 @@ documentation to setup a testing,
 ├── LICENSE
 ├── README.md
 ├── docs # ---------> project documentation
-├── hubcast # ------> python application
+├── src # ----------> Python application
+├── spack # --------> Spack package files
 ├── pyproject.toml
-├── spack.lock
-└── spack.yaml -----> spack development environment
+└── spack.yaml # ---> Spack development environment
 ```
 ```bash
-hubcast
-├── __main__.py # --> hubcast entrypoint and config setup
-├── auth # ---------> authentication library for GitHub/GitLab
-├── github.py # ----> GitHub router setup
-├── gitlab.py # ----> GitLab router setup
-├── routes # -------> GitHub & GitLab event routing logic
-└── utils # --------> Git and common application utilities
+src/hubcast
+├── __main__.py # --> Hubcast entrypoint and config setup
+├── config.py # ----> Hubcast config manager
+├── logging.py # ---> Hubcast logging config
+├── account_map # --> User mapping between Git forges
+├── clients # ------> GitHub & GitLab auth and API clients
+├── repos # --------> Hubcast-managed Git repo config
+├── web # ----------> GitHub & GitLab event routing logic
 ```
