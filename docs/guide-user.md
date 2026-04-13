@@ -23,8 +23,8 @@ The following options are available:
 
 - `owner`: the organization or user that owns the repo on the destination forge
 - `name`: the name of the destination repository
-- `draft_sync`: if enabled, Hubcast will sync draft PRs/MRs. default: True
-- `draft_sync_msg`: if enabled and `draft_sync=False`, Hubcast will post a message to the source repo explaining why the change was not synced. default: True
+- `sync_drafts`: if enabled, Hubcast will sync draft PRs/MRs. default: True
+- `sync_drafts_msg`: if enabled and `draft_sync=False`, Hubcast will post a message to the source repo explaining why the change was not synced. default: True
 
 For example, if you'd like to sync your repo to `https://gitlab.com/example/hubcast-test`, `owner` would be `example` and `name` would be `hubcast-test`.
 
