@@ -97,10 +97,16 @@ If you expect contributions from users who aren't members of the destination rep
 ### Hubcast bot
 Depending on the setup of your Hubcast installation, you can request assistance from the bot by tagging an account (e.g., `@lc-hubcast help`) or the default `/hubcast help` in a PR/MR comment.
 
-The bot can perform the following actions:
-- Approve requests by non-maintainers: this will sync the PR/MR to the destination forge with the identity of the approver.
-- Retry any failed jobs within the GitLab CI pipeline
-- Retry the entire pipeline
+> [!TIP]
+> Check with your Hubcast administrator to confirm the correct bot prefix for your instance.
+
+The bot supports the following commands:
+- `@{bot} help` - Display available commands and usage information
+- `@{bot} approve` - Sync this pull request to the destination forge and trigger a new pipeline (requires maintainer permissions)
+- `@{bot} run pipeline` - Request a new run of the GitLab CI pipeline
+- `@{bot} restart failed jobs` - Restart any failed jobs in the latest CI pipeline
+
+Replace `@{bot}` with your instance's bot user (e.g., `@lc-hubcast`) or use `/hubcast` if no bot user is configured.
 
 #### Approval
 To securely sync commits from external collaborators, approvals require links to a commit hash. You can comment your approval on a PR review:
