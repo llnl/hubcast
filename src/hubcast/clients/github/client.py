@@ -6,6 +6,8 @@ import aiohttp
 from gidgethub import HTTPException
 from gidgethub import aiohttp as gh_aiohttp
 
+from hubcast.exceptions import HubcastError
+
 from .auth import GitHubAuthenticator
 
 log = logging.getLogger(__name__)
@@ -143,13 +145,12 @@ class GitHubClient:
                 return await gh.getitem(url, accept="application/vnd.github.raw")
             except HTTPException as exc:
                 if exc.status_code == 404:
-                    log.info(
+                    raise HubcastError(
                         "Repo config file not found at .github/hubcast.yml",
-                        extra={
-                            "repo_owner": self.repo_owner,
-                            "repo_name": self.repo_name,
-                        },
-                    )
+                        log_level="INFO",
+                        repo=f"{self.repo_owner}/{self.repo_name}",
+                    ) from None
+                # all others are unhandled
                 raise
 
     async def get_pr(self, id: int) -> dict[str, Any]:

@@ -1,6 +1,7 @@
 import yaml
 
 from hubcast.clients.github import GitHubClient
+from hubcast.exceptions import HubcastError
 from hubcast.repos.config import RepoConfig
 
 config_cache: dict[str, RepoConfig] = {}
@@ -20,9 +21,8 @@ async def get_repo_config(
         Tuple of (RepoConfig instance, whether it was freshly fetched)
 
     Raises:
-        yaml.YAMLError: If config file contains invalid YAML
-        KeyError: If config is missing required top-level "Repo" key
-        ValueError: If config is missing required fields
+        HubcastError: If config file contains invalid YAML, is missing required keys,
+            or has validation errors
     """
     fetched = False
     if fullname in config_cache and not refresh:
@@ -33,16 +33,26 @@ async def get_repo_config(
         try:
             config_yaml = yaml.safe_load(config_str)
         except yaml.YAMLError as e:
-            raise yaml.YAMLError(f"Invalid YAML in repo config for {fullname}") from e
+            raise HubcastError(
+                f"Invalid YAML in repo config for {fullname}: {e}",
+                log_level="INFO",
+                repo=fullname,
+            )
 
         try:
             config = RepoConfig.from_yaml_data(config_yaml["Repo"])
         except KeyError as e:
-            raise KeyError(
-                f"Repo config for {fullname} is missing required key: {e}"
-            ) from e
+            raise HubcastError(
+                f"Repo config for {fullname} is missing required key: {e}",
+                log_level="INFO",
+                repo=fullname,
+            ) from None
         except ValueError as e:
-            raise ValueError(f"Invalid repo config for {fullname}: {e}") from e
+            raise HubcastError(
+                f"Invalid repo config for {fullname}: {e}",
+                log_level="INFO",
+                repo=fullname,
+            ) from None
 
         config_cache[fullname] = config
         fetched = True

@@ -6,6 +6,7 @@ from gidgetlab import sansio
 from gidgetlab.exceptions import ValidationFailure
 
 from hubcast.clients.github import GitHubClientFactory
+from hubcast.exceptions import HubcastError
 
 from .routes import router
 
@@ -44,12 +45,14 @@ class GitLabHandler:
 
             # return a "Success"
             return web.Response(status=200)
+        except HubcastError as e:
+            e.log(log)
+            return web.Response(status=500)
         except ValidationFailure:
             log.exception(
                 "Failed to validate Gitlab webhook request",
             )
             return web.Response(status=500)
-
         except Exception:
             log.exception("Failed to handle GitLab webhook")
             return web.Response(status=500)

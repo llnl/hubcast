@@ -5,6 +5,8 @@ from contextlib import contextmanager
 import ldap
 import ldap.sasl
 
+from hubcast.exceptions import HubcastError
+
 from .abc import AccountMap
 
 log = logging.getLogger(__name__)
@@ -127,10 +129,9 @@ class LDAPMap(AccountMap):
             val = values[0]
             return val.decode() if isinstance(val, bytes) else val
 
-        except ldap.LDAPError:
-            log.exception(
-                "LDAP query failed",
-                extra={"base": self.search_base, "filterstr": filterstr},
+        except ldap.LDAPError as e:
+            raise HubcastError(
+                f"LDAP query failed: {e}",
+                base=self.search_base,
+                filterstr=filterstr,
             )
-
-        return None

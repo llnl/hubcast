@@ -7,6 +7,7 @@ from repligit.asyncio import fetch_pack, ls_remote, send_pack
 
 from hubcast.clients.github.client import GitHubClient
 from hubcast.clients.gitlab.client import GitLabClient
+from hubcast.exceptions import HubcastError
 from hubcast.web import comments
 from hubcast.web.github.utils import get_repo_config
 
@@ -24,8 +25,9 @@ class GitHubRouter(routing.Router):
         for callback in found_callbacks:
             try:
                 await callback(event, *args, **kwargs)
+            except HubcastError as e:
+                e.log(log, event_type=event.event, delivery_id=event.delivery_id)
             except Exception:
-                # this catches errors related to processing of webhook events
                 log.exception(
                     "Failed to process GitHub webhook event",
                     extra={
