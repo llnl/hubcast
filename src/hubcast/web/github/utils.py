@@ -35,6 +35,7 @@ async def get_repo_config(
         except yaml.YAMLError as e:
             raise HubcastError(
                 f"Invalid YAML in repo config for {fullname}: {e}",
+                log_level="INFO",
                 repo=fullname,
             )
 
@@ -43,11 +44,13 @@ async def get_repo_config(
         except KeyError as e:
             raise HubcastError(
                 f"Repo config for {fullname} is missing required key: {e}",
+                log_level="INFO",
                 repo=fullname,
             ) from None
         except ValueError as e:
             raise HubcastError(
                 f"Invalid repo config for {fullname}: {e}",
+                log_level="INFO",
                 repo=fullname,
             ) from None
 
