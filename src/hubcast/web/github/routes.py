@@ -358,7 +358,7 @@ async def remove_pr(
     repo_config, _ = await get_repo_config(gh, base_fullname)
 
     if not repo_config.delete_closed:
-        return
+        return {"action": "skipped", "reason": "delete_closed_disabled"}
 
     # if the pull request comes from a fork we should clean up
     # the branch upon closing or merging the PR. However, if the

@@ -387,6 +387,26 @@ async def test_sync_pr_synced_internal(
 
 
 @pytest.mark.asyncio
+async def test_remove_pr_skip_delete_closed_false(
+    mock_pr_closed_event, mock_gh, mock_gl, mock_repligit_ops
+):
+    """PR branch removal should be skipped when delete_closed=False (PR 280)."""
+
+    # Configure repo to NOT delete branches on PR close
+    mock_repligit_ops["get_repo_config"].return_value = (
+        Mock(delete_closed=False, dest_org="owner", dest_name="repo"),
+        True,
+    )
+
+    result = await remove_pr(
+        event=mock_pr_closed_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+    )
+
+    assert result["action"] == "skipped"
+    assert result["reason"] == "delete_closed_disabled"
+
+
+@pytest.mark.asyncio
 async def test_remove_pr_skip_internal(
     mock_pr_closed_event, mock_gh, mock_gl, mock_repligit_ops
 ):
