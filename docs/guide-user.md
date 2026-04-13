@@ -26,7 +26,7 @@ The following options are available:
 - `check_name`: the name of the CI check as reported back to GitHub. default: `gitlab-ci`
 - `delete_closed`: if enabled, Hubcast will delete branches from the destination forge when the corresponding source PR is closed. default: True
 - `sync_drafts`: if enabled, Hubcast will sync draft PRs/MRs. default: True
-- `sync_drafts_msg`: if enabled and `draft_sync=False`, Hubcast will post a message to the source repo explaining why the change was not synced. default: True
+- `sync_drafts_msg`: if enabled and `sync_drafts=False`, Hubcast will post a message to the source repo explaining why the change was not synced. default: True
 
 For example, if you'd like to sync your repo to `https://gitlab.com/example/hubcast-test`, `owner` would be `example` and `name` would be `hubcast-test`.
 
