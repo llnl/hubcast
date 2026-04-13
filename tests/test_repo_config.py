@@ -3,7 +3,8 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 
-from hubcast.web.github.utils import config_cache, create_config, get_repo_config
+from hubcast.repos.config import RepoConfig
+from hubcast.web.github.utils import config_cache, get_repo_config
 
 
 ### FIXTURES
@@ -12,7 +13,7 @@ def mock_github_client():
     """Mock GitHub client."""
     client = AsyncMock()
     client.get_repo_config = AsyncMock(
-        return_value="Repo:\n  owner: owner\n  name: repo\n"
+        return_value="Repo:\n  dest_org: owner\n  dest_name: repo\n"
     )
     return client
 
@@ -31,35 +32,30 @@ def clear_config_cache():
 def test_create_config_minimal():
     """Should create RepoConfig with minimal settings."""
 
-    config = create_config("owner/repo", {"Repo": {"owner": "owner", "name": "repo"}})
+    config = RepoConfig.from_yaml_data({"dest_org": "owner", "dest_name": "repo"})
 
-    assert config.fullname == "owner/repo"
     assert config.dest_org == "owner"
     assert config.dest_name == "repo"
-    assert config.draft_sync is True  # default
-    assert config.draft_sync_msg is True  # default
+    assert config.sync_drafts is True  # default
+    assert config.sync_drafts_msg is True  # default
 
 
 def test_create_config_full():
     """Should create RepoConfig with all settings."""
 
-    config = create_config(
-        "owner/repo",
+    config = RepoConfig.from_yaml_data(
         {
-            "Repo": {
-                "owner": "owner",
-                "name": "repo",
-                "draft_sync": False,
-                "draft_sync_msg": False,
-            }
-        },
+            "dest_org": "owner",
+            "dest_name": "repo",
+            "sync_drafts": False,
+            "sync_drafts_msg": False,
+        }
     )
 
-    assert config.fullname == "owner/repo"
     assert config.dest_org == "owner"
     assert config.dest_name == "repo"
-    assert config.draft_sync is False
-    assert config.draft_sync_msg is False
+    assert config.sync_drafts is False
+    assert config.sync_drafts_msg is False
 
 
 @pytest.mark.asyncio
@@ -87,7 +83,7 @@ async def test_get_repo_config_refreshes(mock_github_client):
 
     # update mock to return different data
     mock_github_client.get_repo_config.return_value = (
-        "Repo:\n  owner: new-org\n  name: new-repo\n"
+        "Repo:\n  dest_org: new-org\n  dest_name: new-repo\n"
     )
 
     # second call with refresh
@@ -117,13 +113,26 @@ async def test_get_repo_config_invalid_yaml():
 
 
 @pytest.mark.asyncio
-async def test_get_repo_config_missing_required_fields():
-    """Test handling of missing fields in repo config."""
+async def test_get_repo_config_missing_repo_key():
+    """Test handling of missing 'Repo' top-level key."""
     gh = AsyncMock()
     # valid YAML but missing the required 'Repo' key
-    gh.get_repo_config = AsyncMock(return_value="NotRepo:\n  owner: owner\n")
+    gh.get_repo_config = AsyncMock(return_value="NotRepo:\n  dest_org: owner\n")
     gh.repo_owner = "owner"
     gh.repo_name = "repo"
 
     with pytest.raises(KeyError):
+        await get_repo_config(gh, "owner/repo")
+
+
+@pytest.mark.asyncio
+async def test_get_repo_config_missing_required_fields():
+    """Test handling of missing required fields within Repo config."""
+    gh = AsyncMock()
+    # valid YAML with 'Repo' key but missing required fields
+    gh.get_repo_config = AsyncMock(return_value="Repo:\n  dest_org: owner\n")
+    gh.repo_owner = "owner"
+    gh.repo_name = "repo"
+
+    with pytest.raises(ValueError, match="Missing required fields: dest_name"):
         await get_repo_config(gh, "owner/repo")
