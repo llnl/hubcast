@@ -4,6 +4,7 @@ from typing import Any
 from gidgetlab import routing, sansio
 
 from hubcast.clients.github.client import GitHubClient
+from hubcast.exceptions import HubcastError
 
 log = logging.getLogger(__name__)
 
@@ -48,8 +49,9 @@ class GitLabRouter(routing.Router):
         for callback in found_callbacks:
             try:
                 await callback(event, *args, **kwargs)
+            except HubcastError as e:
+                e.log(log, event_type=event.event)
             except Exception:
-                # this catches errors related to processing of webhook events
                 log.exception(
                     "Failed to process GitLab webhook event",
                     extra={

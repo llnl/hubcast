@@ -7,6 +7,7 @@ from gidgethub import sansio
 from hubcast.account_map.abc import AccountMap
 from hubcast.clients.github.client import GitHubClientFactory
 from hubcast.clients.gitlab.client import GitLabClientFactory
+from hubcast.exceptions import HubcastError
 
 from .routes import router
 
@@ -60,6 +61,9 @@ class GitHubHandler:
 
             # return a "Success"
             return web.Response(status=200)
+        except HubcastError as e:
+            e.log(log)
+            return web.Response(status=500)
         except Exception:
             log.exception("Failed to handle Github webhook")
             return web.Response(status=500)
