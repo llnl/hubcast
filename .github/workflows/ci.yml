@@ -54,12 +54,12 @@ jobs:
            #   - 'pyproject.toml'
 
   style:
-    if: ${{ needs.changes.outputs.style == 'true' }}
+    if: needs.changes.outputs.style == 'true'
     needs: changes
     uses: ./.github/workflows/style.yml
 
   security:
-    if: ${{ needs.changes.outputs.security == 'true' }}
+    if: needs.changes.outputs.security == 'true'
     needs: [changes, style]
     uses: ./.github/workflows/security.yml
     permissions:
@@ -67,17 +67,17 @@ jobs:
       security-events: write
 
   # unit-tests:
-  #   if: ${{ needs.changes.outputs.unit-tests == 'true' }}
+  #   if: needs.changes.outputs.unit-tests == 'true'
   #   needs: [changes, style]
   #   uses: ./.github/workflows/unit-tests.yml
 
   # coverage:
-  #   if: ${{ needs.changes.outputs.unit-tests == 'true' }}
+  #   if: needs.changes.outputs.unit-tests == 'true'
   #   needs: [changes, style, unit-tests]
   #   uses: ./.github/workflows/coverage.yml
 
   container:
-    if: ${{ needs.changes.outputs.container == 'true' }}
+    if: always() && needs.changes.outputs.container == 'true'
     needs: [changes, style, security]
     uses: ./.github/workflows/container.yml
     permissions:

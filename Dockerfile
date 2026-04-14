@@ -14,7 +14,7 @@ COPY logging_config.json ./
 # create venv and build hubcast and deps
 RUN python -m venv /venv \
  && /venv/bin/pip install --upgrade pip setuptools wheel \
- && /venv/bin/pip install --no-cache-dir /app
+ && /venv/bin/pip install --no-cache-dir /app[ldap]
 
 FROM python:3.12-alpine
 WORKDIR /app
