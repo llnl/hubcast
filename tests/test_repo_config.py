@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 
+from hubcast.exceptions import HubcastError
 from hubcast.repos.config import RepoConfig
 from hubcast.web.github.utils import config_cache, get_repo_config
 
@@ -108,7 +109,7 @@ async def test_get_repo_config_invalid_yaml():
     gh.repo_owner = "owner"
     gh.repo_name = "repo"
 
-    with pytest.raises(yaml.YAMLError):
+    with pytest.raises(HubcastError, match="Invalid YAML in repo config"):
         await get_repo_config(gh, "owner/repo")
 
 
@@ -121,7 +122,7 @@ async def test_get_repo_config_missing_repo_key():
     gh.repo_owner = "owner"
     gh.repo_name = "repo"
 
-    with pytest.raises(KeyError):
+    with pytest.raises(HubcastError, match="missing required key"):
         await get_repo_config(gh, "owner/repo")
 
 
@@ -134,5 +135,5 @@ async def test_get_repo_config_missing_required_fields():
     gh.repo_owner = "owner"
     gh.repo_name = "repo"
 
-    with pytest.raises(ValueError, match="Missing required fields: dest_name"):
+    with pytest.raises(HubcastError, match="Missing required fields: dest_name"):
         await get_repo_config(gh, "owner/repo")

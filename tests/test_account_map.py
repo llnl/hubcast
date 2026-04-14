@@ -5,6 +5,7 @@ import pytest
 
 from hubcast.account_map.file import FileMap, FileMapError
 from hubcast.account_map.ldap import LDAPMap
+from hubcast.exceptions import HubcastError
 
 ### FIXTURES
 
@@ -111,7 +112,7 @@ def test_ldap_map_attrib_missing(ldap_map, attrs):
 
 
 def test_ldap_map_exception(ldap_map):
-    """If LDAP raises an exception, should return None."""
+    """If LDAP raises an exception, should raise HubcastError."""
 
     with patch("ldap.initialize") as mock_init:
         mock_conn = Mock()
@@ -119,8 +120,8 @@ def test_ldap_map_exception(ldap_map):
         mock_conn.search_s.side_effect = ldap.LDAPError("something bad")
         mock_conn.unbind_s.return_value = None
 
-        result = ldap_map("caetano_github")
-        assert result is None
+        with pytest.raises(HubcastError, match="LDAP query failed"):
+            ldap_map("caetano_github")
 
 
 def test_ldap_map_unbind_failure(ldap_map):
