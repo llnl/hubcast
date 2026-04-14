@@ -34,15 +34,13 @@ def mock_request():
     request.read = AsyncMock(
         return_value=b'{"object_attributes": {"status": "success"}}'
     )
+
     request.headers = {
-        "X-Gitlab-Event": "Pipeline Hook",
+        "x-gitlab-event": "Pipeline Hook",
+        "x-gitlab-token": "valid-token",
     }
-    # Mock query parameters
-    request.rel_url.query = {
-        "gh_owner": "owner",
-        "gh_repo": "repo",
-        "gh_check": "gitlab-ci",
-    }
+
+    request.rel_url.query = {}
     return request
 
 
@@ -61,10 +59,18 @@ async def test_handle_valid_webhook(handler, mock_request):
     """Should return 200 for a normal webhook."""
 
     with (
+        patch("hubcast.web.gitlab.handler.validate_routing_token") as mock_validate,
         patch("hubcast.web.gitlab.handler.sansio.Event.from_http") as mock_event,
         patch("hubcast.web.gitlab.handler.spawn", side_effect=fake_spawn),
         patch("hubcast.web.gitlab.handler.router.dispatch", new_callable=AsyncMock),
     ):
+        # Mock routing token validation
+        mock_validate.return_value = {
+            "gh_owner": "owner",
+            "gh_repo": "repo",
+            "gh_check": "gitlab-ci",
+        }
+
         mock_event.return_value = Mock(
             event="Pipeline Hook",
             data={
@@ -84,7 +90,17 @@ async def test_handle_valid_webhook(handler, mock_request):
 async def test_handle_exception(handler, mock_request):
     """Should return 500 if an exception occurs."""
 
-    with patch("hubcast.web.gitlab.handler.sansio.Event.from_http") as mock_event:
+    with (
+        patch("hubcast.web.gitlab.handler.validate_routing_token") as mock_validate,
+        patch("hubcast.web.gitlab.handler.sansio.Event.from_http") as mock_event,
+    ):
+        # Mock routing token validation
+        mock_validate.return_value = {
+            "gh_owner": "owner",
+            "gh_repo": "repo",
+            "gh_check": "gitlab-ci",
+        }
+
         mock_event.side_effect = Exception("bug")
         response = await handler.handle(mock_request)
         assert response.status == 500
@@ -92,30 +108,40 @@ async def test_handle_exception(handler, mock_request):
 
 @pytest.mark.asyncio
 async def test_handle_validation_failure(handler, mock_request):
-    """Should return 500 for a validation failure (mismatched webhook secrets)."""
+    """Should return 401 for an invalid routing token."""
+
+    from hubcast.web.utils import RoutingTokenError
 
     mock_request.headers = {
-        "X-Gitlab-Event": "Pipeline Hook",
-        "X-Gitlab-Token": "correct-token",  # gitlab will send this token
+        "x-gitlab-event": "Pipeline Hook",
+        "x-gitlab-token": "invalid-token",
     }
 
-    # handler has a different secret configured
-    handler.webhook_secret = "wrong-secret"
-    # sansio.Event.from_http will raise ValidationFailure due to token mismatch
-    response = await handler.handle(mock_request)
+    with patch("hubcast.web.gitlab.handler.validate_routing_token") as mock_validate:
+        # Simulate token validation failure
+        mock_validate.side_effect = RoutingTokenError("Invalid token signature")
+        response = await handler.handle(mock_request)
 
-    assert response.status == 500
+    assert response.status == 401
 
 
 @pytest.mark.asyncio
 async def test_handle_query_params(handler, mock_request):
-    """Should extract GitHub repo info from query params."""
+    """Should extract GitHub repo info from routing token."""
 
     with (
+        patch("hubcast.web.gitlab.handler.validate_routing_token") as mock_validate,
         patch("hubcast.web.gitlab.handler.sansio.Event.from_http") as mock_event,
         patch("hubcast.web.gitlab.handler.spawn", side_effect=fake_spawn),
         patch("hubcast.web.gitlab.handler.router.dispatch", new_callable=AsyncMock),
     ):
+        # Mock routing token validation with specific owner/repo
+        mock_validate.return_value = {
+            "gh_owner": "owner",
+            "gh_repo": "repo",
+            "gh_check": "gitlab-ci",
+        }
+
         # just a basic event
         mock_event.return_value = Mock(
             event="Pipeline Hook", data={"object_attributes": {"status": "success"}}
@@ -124,7 +150,7 @@ async def test_handle_query_params(handler, mock_request):
         response = await handler.handle(mock_request)
 
         assert response.status == 200
-        # the gh factory should be called with the correct owner and repo (from mock_request)
+        # the gh factory should be called with the correct owner and repo (from routing token)
         handler.github_client_factory.create_client.assert_called_once_with(
             "owner", "repo"
         )
