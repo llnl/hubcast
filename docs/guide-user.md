@@ -114,3 +114,5 @@ Replace `@{bot}` with your instance's bot user (e.g., `@lc-hubcast`) or use `/hu
 To securely sync commits from external collaborators, approvals require links to a commit hash. You can comment your approval on a PR review:
 
 ![A GitHub pull request review; the user has written a comment `@lc-hubcast approve` to sync the user's contributions.](/docs/img/approve-comment.png)
+
+Note: commenting on lines of code modified by the PR **will not** approve syncing; it must be done as shown above.
