@@ -115,4 +115,5 @@ To securely sync commits from external collaborators, approvals require links to
 
 ![A GitHub pull request review; the user has written a comment `@lc-hubcast approve` to sync the user's contributions.](/docs/img/approve-comment.png)
 
-Note: commenting on lines of code modified by the PR **will not** approve syncing; it must be done as shown above.
+> [!NOTE]
+> Commenting on lines of code modified by the PR **will not** approve syncing; it must be done as shown above.
