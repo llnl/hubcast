@@ -412,9 +412,9 @@ async def respond_comment(
         response = comments.help_message(gh.bot_caller)
 
     elif re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
-        # TODO when docs PR is merged add a link to the image showing the review process
         response = (
-            "To approve the sync of this PR, please use the GitHub review feature "
+            "To approve the sync of this PR, please use the "
+            "[GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#approval) "
             "to submit an approval. This ensures the approval is tied to a specific "
             "commit to avoid unintended syncing of malicious commits."
         )
