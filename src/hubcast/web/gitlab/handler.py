@@ -7,6 +7,7 @@ from gidgetlab.exceptions import ValidationFailure
 
 from hubcast.clients.github import GitHubClientFactory
 from hubcast.exceptions import HubcastError
+from hubcast.web.utils import RoutingTokenError, validate_routing_token
 
 from .routes import router
 
@@ -20,23 +21,32 @@ class GitLabHandler:
 
     async def handle(self, request: web.Request) -> web.Response:
         try:
-            # read the GitLab webhook payload
-            body = await request.read()
-            event = sansio.Event.from_http(
-                request.headers, body, secret=self.webhook_secret
-            )
-            log.info("GitLab webhook received", extra={"event_type": event.event})
+            token = request.headers.get("x-gitlab-token")
+            if not token:
+                log.warning("Missing webhook token in headers")
+                return web.Response(status=401, text="Unauthorized")
 
-            # get coorisponding GitHub repo owner and name from event
-            # request variables
-            gh_repo_owner = request.rel_url.query["gh_owner"]
-            gh_repo = request.rel_url.query["gh_repo"]
+            # Validate token signature and extract routing information
+            try:
+                routing_data = validate_routing_token(self.webhook_secret, token)
+            except RoutingTokenError as e:
+                e.log(log)
+                return web.Response(status=401, text="Unauthorized")
+
+            gh_repo_owner = routing_data["gh_owner"]
+            gh_repo = routing_data["gh_repo"]
+            gh_check_name = routing_data["gh_check"]
+
+            body = await request.read()
+
+            # Pass token as secret for gidgetlab's string validation
+            # (redundant from security perspective, but required by library)
+            event = sansio.Event.from_http(request.headers, body, secret=token)
+            log.info("GitLab webhook received", extra={"event_type": event.event})
 
             github_client = self.github_client_factory.create_client(
                 gh_repo_owner, gh_repo
             )
-
-            gh_check_name = request.rel_url.query["gh_check"]
 
             await spawn(
                 request,

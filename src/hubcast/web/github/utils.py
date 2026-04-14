@@ -1,10 +1,12 @@
 import yaml
+from cachetools import TTLCache
 
 from hubcast.clients.github import GitHubClient
 from hubcast.exceptions import HubcastError
 from hubcast.repos.config import RepoConfig
 
-config_cache: dict[str, RepoConfig] = {}
+# Shared cache for repository configs with 30-minute TTL
+config_cache: TTLCache[str, RepoConfig] = TTLCache(maxsize=1000, ttl=1800)
 
 
 async def get_repo_config(
