@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock
 
 import pytest
-import yaml
 
 from hubcast.exceptions import HubcastError
 from hubcast.repos.config import RepoConfig
