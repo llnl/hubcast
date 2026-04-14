@@ -30,7 +30,7 @@ class GitLabHandler:
             try:
                 routing_data = validate_routing_token(self.webhook_secret, token)
             except RoutingTokenError as e:
-                log.warning("Invalid webhook routing token", extra={"error": str(e)})
+                e.log(log)
                 return web.Response(status=401, text="Unauthorized")
 
             gh_repo_owner = routing_data["gh_owner"]

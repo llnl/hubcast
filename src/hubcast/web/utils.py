@@ -1,7 +1,14 @@
 import jwt
 
+from hubcast.exceptions import HubcastError
 
-class RoutingTokenError(Exception):
+# If this is changed we should add the previous value to the decode
+# method's list to allow for backwards compatibility while webhooks
+# are migrated over time
+JWT_ALGORITHM = "HS256"
+
+
+class RoutingTokenError(HubcastError):
     """Raised when routing token validation fails."""
 
 
@@ -28,7 +35,7 @@ def generate_routing_token(
         "gh_check": gh_check,
     }
 
-    return jwt.encode(payload, secret, algorithm="HS256")
+    return jwt.encode(payload, secret, algorithm=JWT_ALGORITHM)
 
 
 def validate_routing_token(secret: str, token: str) -> dict[str, str]:
@@ -46,16 +53,21 @@ def validate_routing_token(secret: str, token: str) -> dict[str, str]:
                           or payload is missing required fields
     """
     try:
-        payload = jwt.decode(token, secret, algorithms=["HS256"])
+        payload = jwt.decode(token, secret, algorithms=[JWT_ALGORITHM])
     except jwt.InvalidTokenError as e:
-        raise RoutingTokenError(f"Invalid token: {e}") from e
+        raise RoutingTokenError(
+            f"Invalid routing token: {e}",
+            log_level="WARNING",
+        ) from e
 
     # Validate required fields are present
     required_fields = {"gh_owner", "gh_repo", "gh_check"}
     missing_fields = required_fields - payload.keys()
     if missing_fields:
         raise RoutingTokenError(
-            f"Payload missing required fields: {', '.join(sorted(missing_fields))}"
+            f"Routing token payload missing required fields: {', '.join(sorted(missing_fields))}",
+            log_level="WARNING",
+            missing_fields=sorted(missing_fields),
         )
 
     return {
