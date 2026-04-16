@@ -25,9 +25,9 @@ GH_REACTIONS = {
 
 
 class GitHubClientFactory:
-    def __init__(self, app_id: str, privkey: str, requester: str, bot_caller: str):
+    def __init__(self, app_id: str, private_key: str, requester: str, bot_caller: str):
         self.requester = requester
-        self.auth = GitHubAuthenticator(requester, privkey, app_id)
+        self.auth = GitHubAuthenticator(requester, private_key, app_id)
         self.bot_caller = bot_caller
 
     def create_client(self, repo_owner: str, repo_name: str) -> "GitHubClient":

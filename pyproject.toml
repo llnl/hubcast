@@ -11,6 +11,8 @@ dependencies = [
     "cachetools",
     "gidgethub",
     "gidgetlab",
+    "pydantic",
+    "pydantic-settings",
     "pyjwt",
     "repligit[aiohttp]",
     "pyyaml",

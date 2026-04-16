@@ -1,77 +1,133 @@
-import os
+from typing import Annotated, Literal, Union
+
+from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ConfigError(Exception):
     pass
 
 
-class Config:
-    def __init__(self):
-        self.port = int(env_get("HC_PORT", default="8080"))
+class GitHubConfig(BaseModel):
+    """GitHub source forge configuration."""
 
-        self.account_map_type = env_get("HC_ACCOUNT_MAP_TYPE")
+    # GitHub App ID
+    app_id: str
 
-        self.logging_config_path = env_get("HC_LOGGING_CONFIG_PATH", optional=True)
+    # Contents of the app private key file (do not strip newlines)
+    private_key: str
 
-        if self.account_map_type == "file":
-            self.account_map_path = env_get("HC_ACCOUNT_MAP_PATH")
-        elif self.account_map_type == "ldap":
-            self.ldap_map_uri = env_get("HC_LDAP_MAP_URI")
-            self.ldap_map_base = env_get("HC_LDAP_MAP_BASE")
-            self.ldap_map_input = env_get("HC_LDAP_MAP_INPUT")
-            self.ldap_map_output = env_get("HC_LDAP_MAP_OUTPUT")
-            self.ldap_map_scope = env_get("HC_LDAP_MAP_SCOPE")
-            self.ldap_map_bind_dn = env_get("HC_LDAP_MAP_BIND_DN", optional=True)
-            self.ldap_map_bind_password = env_get(
-                "HC_LDAP_MAP_BIND_PASSWORD", optional=True
-            )
+    # Webhook secret for verifying requests from GitHub
+    webhook_secret: str
 
-        self.gh = GitHubConfig()
-        self.gl = GitLabConfig()
+    # Bot mention prefix for PR commands (e.g., "@lc-hubcast" or "/hubcast")
+    bot_caller: str = "/hubcast"
 
-
-class GitHubConfig:
-    def __init__(self):
-        self.app_id = env_get("HC_GH_APP_IDENTIFIER")
-        self.privkey = env_get("HC_GH_PRIVATE_KEY")
-        self.webhook_secret = env_get("HC_GH_SECRET")
-
-        self.bot_caller = env_get("HC_GH_BOT_USER", default="/hubcast")
-        if not self.bot_caller.startswith(("/", "@")):
-            self.bot_caller = f"@{self.bot_caller}"
+    @field_validator("bot_caller")
+    @classmethod
+    def normalize_bot_caller(cls, v: str) -> str:
+        """Ensure bot_caller starts with @ or /."""
+        if not v.startswith(("/", "@")):
+            return f"@{v}"
+        return v
 
 
-class GitLabConfig:
-    def __init__(self):
-        self.instance_url = env_get("HC_GL_URL")
-        self.token = env_get("HC_GL_TOKEN")
-        self.token_type = env_get("HC_GL_TOKEN_TYPE", default="impersonation")
-        self.webhook_secret = env_get("HC_GL_SECRET")
-        self.callback_url = env_get("HC_GL_CALLBACK_URL")
+class GitLabConfig(BaseModel):
+    """GitLab destination forge configuration."""
+
+    # URL of the GitLab instance (e.g., https://gitlab.com)
+    url: str
+
+    # Token type: "impersonation" (default) or "single"
+    token_type: str = "impersonation"
+
+    # Personal access token with api scope
+    token: str
+
+    # Webhook secret for verifying requests from GitLab
+    webhook_secret: str
+
+    # URL where Hubcast receives GitLab events (e.g., https://hubcast.example.com/v1/events/dest/gitlab)
+    callback_url: str
 
 
-def env_get(key: str, default: str | None = None, optional: bool = False) -> str | None:
+class FileAccountMapConfig(BaseModel):
+    """File-based account map configuration."""
+
+    type: Literal["file"] = "file"
+
+    # Path to YAML file mapping source forge usernames to destination forge usernames
+    path: str
+
+
+class LDAPAccountMapConfig(BaseModel):
+    """LDAP-based account map configuration."""
+
+    type: Literal["ldap"] = "ldap"
+
+    # URI of the LDAP instance (e.g., ldap://ldap.example.com)
+    uri: str
+
+    # Base DN for LDAP searches (e.g., dc=example,dc=com)
+    base: str
+
+    # LDAP attribute containing source forge user id (e.g., githubId)
+    input: str
+
+    # LDAP attribute containing destination forge user id (e.g., uid)
+    output: str
+
+    # LDAP search scope: 0 (base), 1 (one level), 2 (subtree)
+    scope: int
+
+    # Bind distinguished name (optional, uses SASL/GSSAPI if not provided)
+    bind_dn: str | None = None
+
+    # Bind password (optional)
+    bind_password: str | None = None
+
+
+AccountMapConfig = Annotated[
+    Union[FileAccountMapConfig, LDAPAccountMapConfig],
+    Field(discriminator="type"),
+]
+
+
+class Config(BaseSettings):
+    """Main application configuration."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="HC_",
+        env_nested_delimiter="__",
+    )
+
+    # Port for Hubcast to listen on
+    port: int = 8080
+
+    # Path to logging config JSON file (dictConfig format, optional)
+    logging_config_path: str | None = None
+
+    # Account mapper configuration (file or ldap)
+    account_map: AccountMapConfig
+
+    gh: GitHubConfig
+    gl: GitLabConfig
+
+
+def load_config() -> Config:
+    """Load configuration from environment variables.
+
+    Returns:
+        Config: Validated configuration loaded from environment.
+
+    Raises:
+        ConfigError: Any validation failures.
     """
-    Retrieve environment variables.
-
-    Attributes:
-    ----------
-    key: str
-        The environment variable key to retrieve.
-    default: any, optional
-        The default value to return if the environment variable is not set.
-        If you want the return value to be None if not set, use optional=True instead.
-    optional: bool, optional
-        If True and no default is provided, return None when the environment variable is not set.
-    """
-
     try:
-        return os.environ[key]
-    except KeyError:
-        if default is not None:
-            return default
-
-        if optional:
-            return None
-
-        raise ConfigError(f"Required environment variable not found: {key}")
+        return Config.model_validate({})
+    except ValidationError as e:
+        errors = "\n".join(
+            f"  {'.'.join(map(str, err['loc']))}: {err['msg']}"
+            for err in e.errors(include_url=False, include_input=False)
+        )
+        raise ConfigError(f"Configuration validation failed:\n{errors}") from None
