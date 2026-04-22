@@ -20,7 +20,7 @@ class Config:
             self.ldap_map_base = env_get("HC_LDAP_MAP_BASE")
             self.ldap_map_input = env_get("HC_LDAP_MAP_INPUT")
             self.ldap_map_output = env_get("HC_LDAP_MAP_OUTPUT")
-            self.ldap_map_scope = env_get("HC_LDAP_MAP_SCOPE")
+            self.ldap_map_scope = int(env_get("HC_LDAP_MAP_SCOPE"))
             self.ldap_map_bind_dn = env_get("HC_LDAP_MAP_BIND_DN", optional=True)
             self.ldap_map_bind_password = env_get(
                 "HC_LDAP_MAP_BIND_PASSWORD", optional=True
