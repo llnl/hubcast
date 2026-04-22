@@ -98,6 +98,9 @@ class GitLabClient:
                 url=self.instance_url,
             )
 
+            # temporary fix to support gitlab deployments in sub-paths
+            gl.api_url = f"{self.instance_url}/api/v4/"
+
             existing_hook = None
 
             repo_id = urllib.parse.quote_plus(gl_fullname)
@@ -150,6 +153,9 @@ class GitLabClient:
                 url=self.instance_url,
             )
 
+            # temporary fix to support gitlab deployments in sub-paths
+            gl.api_url = f"{self.instance_url}/api/v4/"
+
             repo_id = urllib.parse.quote_plus(gl_fullname)
 
             pipeline = await gl.getitem(
@@ -174,6 +180,9 @@ class GitLabClient:
                 url=self.instance_url,
             )
 
+            # temporary fix to support gitlab deployments in sub-paths
+            gl.api_url = f"{self.instance_url}/api/v4/"
+
             repo_id = urllib.parse.quote_plus(gl_fullname)
 
             pipeline = await gl.post(f"/projects/{repo_id}/pipeline?ref={ref}", data={})
@@ -196,6 +205,9 @@ class GitLabClient:
                 access_token=gl_token,
                 url=self.instance_url,
             )
+
+            # temporary fix to support gitlab deployments in sub-paths
+            gl.api_url = f"{self.instance_url}/api/v4/"
 
             repo_id = urllib.parse.quote_plus(gl_fullname)
 
