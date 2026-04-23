@@ -89,10 +89,10 @@ class GitHubAuthenticator:
             # GitHub requires that you create a JWT signed with the application's
             # private key. You need the app id and the private key, and you can
             # use this gidgethub method to create the JWT.
-            now = time.time()
+            now = int(time.time())
             jwt = gha.get_jwt(app_id=self.app_id, private_key=self.private_key)
 
-            # gidgethub JWT's expire after 10 minutes (you cannot change it)
-            return (now + 10 * 60), jwt
+            # JWT expires after 10 minutes, but cache for 9 to handle clock skew
+            return (now + 9 * 60), jwt
 
         return await self._tokens.get("JWT", renew_jwt)
