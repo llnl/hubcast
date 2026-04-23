@@ -78,6 +78,7 @@ async def sync_branch(
             gh_repo=src_repo_name,
             gh_check=repo_config.check_name,
             check_types=repo_config.check_types,
+            create_mr=repo_config.create_mr,
         )
 
     # sync commits from GitHub -> GitLab
@@ -186,6 +187,7 @@ async def sync_pr(
     gl_user: str,
     src_repo_private: bool,
     want_sha: str,
+    default_branch: str,
 ) -> None:
     """Sync the git fork/branch referenced in a PR to GitLab.
 
@@ -282,6 +284,19 @@ async def sync_pr(
         password=gl_token,
     )
 
+    if repo_config.create_mr and not await gl.get_mr(
+        dest_fullname, target_ref.removeprefix("refs/heads/"), default_branch
+    ):  # skip already created MRs
+        # TODO we still want to create an MR even if the target ref is up to date
+        await gl.create_mr(
+            gl_fullname=dest_fullname,
+            # TODO the `target_branch` wording here is a bit odd as we usually refer to it as the destination branch we sync to, but for GL MRs it refers to the base for the MR
+            src_branch=target_ref.removeprefix("refs/heads/"),
+            target_branch=default_branch,
+            ref_id=pull_request_id,
+            ref_url=pull_request["html_url"],
+        )
+
 
 @router.register("pull_request", action="opened")
 @router.register("pull_request", action="reopened")
@@ -303,7 +318,15 @@ async def sync_pr_event(
     else:
         # these events are not triggered by new commits, so we sync the head
         want_sha = pull_request["head"]["sha"]
-    await sync_pr(pull_request, gh, gl, gl_user, src_repo_private, want_sha=want_sha)
+    await sync_pr(
+        pull_request,
+        gh,
+        gl,
+        gl_user,
+        src_repo_private,
+        want_sha=want_sha,
+        default_branch=event.data["repository"]["default_branch"],
+    )
 
 
 @router.register("pull_request", action="closed")

@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 from gidgetlab import routing, sansio
 
 from hubcast.clients.github.client import GitHubClient
+from hubcast.clients.gitlab.client import GitLabClient
 from hubcast.exceptions import HubcastError
 
 log = logging.getLogger(__name__)
@@ -66,11 +67,41 @@ router = GitLabRouter()
 
 @router.register("Pipeline Hook")
 async def pipeline_status_relay(
-    event: sansio.Event, gh: GitHubClient, gh_check_name: str, *arg, **kwargs
+    event: sansio.Event,
+    gh: GitHubClient,
+    gl: GitLabClient,
+    gh_check_name: str,
+    create_mr: bool,
+    *args,
+    **kwargs,
 ) -> None:
     """Relay status of a GitLab pipeline back to GitHub."""
     # get ref from event
     ref = event.data["object_attributes"]["sha"]
+
+    # GitLab creates two types of MR pipelines:
+    # - regular: event.commit.id is the actual source commit
+    # - merged results: event.commit.id is a synthetic merge commit
+    # we cannot reliably distinguish between these two types from the webhook payload
+    # without making an API call, so we fetch the source branch HEAD to update the GitHub check
+    # associated with the source commit.
+
+    is_mr_event = (
+        event.data["object_attributes"]["source"] == "merge_request_event"
+        and "merge_request" in event.data
+    )
+    if is_mr_event:
+        source_branch = event.data["merge_request"]["source_branch"]
+        gl_fullname = event.data["project"]["path_with_namespace"]
+        ref = await gl.get_branch_head(gl_fullname, source_branch)
+
+    # modify check name based on the pipeline source
+    check_name = gh_check_name
+    if create_mr:
+        if is_mr_event:
+            check_name = f"{gh_check_name} [merge request]"
+        else:
+            check_name = f"{gh_check_name} [branch]"
 
     # get status from event
     pipeline_status = event.data["object_attributes"]["status"]
@@ -80,8 +111,7 @@ async def pipeline_status_relay(
 
     if status:
         await gh.set_check_status(
-            ref,
-            gh_check_name,
+            ref, check_name,
             status,
             title="External pipeline run",
             summary=f"[View this pipeline on {urlparse(pipeline_url).netloc}]({pipeline_url})",

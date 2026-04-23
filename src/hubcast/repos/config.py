@@ -27,7 +27,7 @@ class RepoConfig(BaseModel):
     # via setting one or more of "pipeline" and/or "jobs"
     check_types: list[Literal["pipeline", "jobs"]] = ["pipeline"]
 
-    # TODO: create GitLab MRs that mirror GitHub PRs to allow users to test
+    # Create GitLab MRs that mirror GitHub PRs to allow users to test
     # synthetic merge commits between the branch and the default branch
     create_mr: bool = False
 

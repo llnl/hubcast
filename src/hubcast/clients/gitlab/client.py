@@ -1,6 +1,6 @@
 import logging
 import urllib.parse
-from typing import Literal
+from typing import Any, Literal
 
 import aiohttp
 import gidgetlab.aiohttp
@@ -66,6 +66,70 @@ class GitLabClient:
         self.webhook_secret = webhook_secret
         self.user = user
 
+    async def get_mr(
+        self, gl_fullname: str, src_branch: str, target_branch: str
+    ) -> list[dict[str, Any]]:
+        gl_token = await self.auth.authenticate_user(self.user)
+
+        async with aiohttp.ClientSession() as session:
+            gl = gidgetlab.aiohttp.GitLabAPI(
+                session,
+                requester=self.requester,
+                access_token=gl_token,
+                url=self.instance_url,
+            )
+
+            # temporary fix to support gitlab deployments in sub-paths
+            gl.api_url = f"{self.instance_url}/api/v4/"
+
+            repo_id = urllib.parse.quote_plus(gl_fullname)
+
+            return await gl.getitem(
+                f"/projects/{repo_id}/merge_requests?source_branch={src_branch}&target_branch={target_branch}"
+            )
+
+    async def create_mr(
+        self,
+        gl_fullname: str,
+        src_branch: str,
+        target_branch: str,
+        ref_id: int,
+        ref_url: str,
+    ):
+        """Create a merge request in GitLab.
+
+        Args:
+            gl_fullname: GitLab project name
+            src_branch: Source branch for the MR
+            target_branch: Target (base) branch for the MR
+            ref_id: GitHub PR number to reference in the MR title
+            ref_url: GitHub PR URL to include in the MR description
+        """
+        gl_token = await self.auth.authenticate_user(username=self.user)
+
+        async with aiohttp.ClientSession() as session:
+            gl = gidgetlab.aiohttp.GitLabAPI(
+                session,
+                requester=self.requester,
+                access_token=gl_token,
+                url=self.instance_url,
+            )
+
+            # temporary fix to support gitlab deployments in sub-paths
+            gl.api_url = f"{self.instance_url}/api/v4/"
+
+            repo_id = urllib.parse.quote_plus(gl_fullname)
+
+            await gl.post(
+                f"/projects/{repo_id}/merge_requests",
+                data={
+                    "source_branch": src_branch,
+                    "target_branch": target_branch,
+                    "title": f"PR from source: #{ref_id}",
+                    "description": ref_url,
+                },
+            )
+
     async def set_webhook(
         self,
         dest_org: str,
@@ -74,6 +138,7 @@ class GitLabClient:
         gh_repo: str,
         gh_check: str,
         check_types: list[Literal["pipeline", "jobs"]],
+        create_mr: bool,
     ) -> None:
         gl_token = await self.auth.authenticate_user(username=self.user)
         gl_fullname = f"{dest_org}/{dest_repo}"
@@ -83,6 +148,7 @@ class GitLabClient:
             gh_owner=gh_owner,
             gh_repo=gh_repo,
             gh_check=gh_check,
+            create_mr=self.create_mr,
         )
         token = routing_token.encode(self.webhook_secret)
 
@@ -214,3 +280,26 @@ class GitLabClient:
             )
 
             return pipeline.get("web_url")
+
+    async def get_branch_head(self, gl_fullname: str, branch_name: str) -> str:
+        """Get the HEAD commit SHA of a branch."""
+        gl_token = await self.auth.authenticate_user(self.user)
+
+        async with aiohttp.ClientSession() as session:
+            gl = gidgetlab.aiohttp.GitLabAPI(
+                session,
+                requester=self.requester,
+                access_token=gl_token,
+                url=self.instance_url,
+            )
+
+            # temporary fix to support gitlab deployments in sub-paths
+            gl.api_url = f"{self.instance_url}/api/v4/"
+
+            repo_id = urllib.parse.quote_plus(gl_fullname)
+
+            branch_data = await gl.getitem(
+                f"/projects/{repo_id}/repository/branches/{branch_name}"
+            )
+
+            return branch_data["commit"]["id"]
