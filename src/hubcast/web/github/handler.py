@@ -50,11 +50,10 @@ class GitHubHandler:
             if gitlab_user is None:
                 log.info("Unauthorized GitHub user", extra={"github_user": github_user})
                 return web.Response(status=200)
-            else:
-                log.info(
-                    "User authorized",
-                    extra={"github_user": github_user, "gitlab_user": gitlab_user},
-                )
+            log.info(
+                "User authorized",
+                extra={"github_user": github_user, "gitlab_user": gitlab_user},
+            )
 
             gh_repo_owner = event.data["repository"]["owner"]["login"]
             gh_repo = event.data["repository"]["name"]
