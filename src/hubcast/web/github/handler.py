@@ -8,6 +8,7 @@ from hubcast.account_map.abc import AccountMap
 from hubcast.clients.github.client import GitHubClientFactory
 from hubcast.clients.gitlab.client import GitLabClientFactory
 from hubcast.exceptions import HubcastError
+from hubcast.logging import delivery_id_context, event_type_context
 
 from .routes import router
 
@@ -35,10 +36,11 @@ class GitHubHandler:
                 request.headers, body, secret=self.webhook_secret
             )
 
-            log.info(
-                "GitHub webhook received",
-                extra={"event_type": event.event, "delivery_id": event.delivery_id},
-            )
+            # Set request metadata in context
+            delivery_id_context.set(event.delivery_id)
+            event_type_context.set(event.event)
+
+            log.info("GitHub webhook received")
 
             # GitHub will notify when a repo installs the Hubcast app; we don't need to handle
             if event.event in ("installation", "installation_repositories"):

@@ -1,3 +1,4 @@
+import contextvars
 import datetime as dt
 import json
 import logging
@@ -28,6 +29,14 @@ LOG_RECORD_BUILTIN_ATTRS = frozenset(
         "threadName",
         "taskName",
     }
+)
+
+# Context vars to store request metadata for inclusion in logs
+delivery_id_context: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "delivery_id", default=None
+)
+event_type_context: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "event_type", default=None
 )
 
 
@@ -109,3 +118,19 @@ class HubcastConsoleFormatter(logging.Formatter):
             extra_str = ""
 
         return base + extra_str
+
+
+class RequestContextFilter(logging.Filter):
+    """Adds delivery_id and event_type from context to all logs."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # only add fields when they're set to avoid null values
+        delivery_id = delivery_id_context.get()
+        if delivery_id is not None:
+            record.delivery_id = delivery_id
+
+        event_type = event_type_context.get()
+        if event_type is not None:
+            record.event_type = event_type
+
+        return True

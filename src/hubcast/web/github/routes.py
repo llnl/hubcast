@@ -26,15 +26,9 @@ class GitHubRouter(routing.Router):
             try:
                 await callback(event, *args, **kwargs)
             except HubcastError as e:
-                e.log(log, event_type=event.event, delivery_id=event.delivery_id)
+                e.log(log)
             except Exception:
-                log.exception(
-                    "Failed to process GitHub webhook event",
-                    extra={
-                        "event_type": event.event,
-                        "delivery_id": event.delivery_id,
-                    },
-                )
+                log.exception("Failed to process GitHub webhook event")
 
 
 router = GitHubRouter()
