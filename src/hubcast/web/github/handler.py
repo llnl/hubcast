@@ -48,7 +48,7 @@ class GitHubHandler:
 
             # GitHub will notify when a repo installs the Hubcast app; we don't need to handle
             if event.event in ("installation", "installation_repositories"):
-                log.info(f"Skipping handling of event: {event.event}")
+                log.info("Skipping handling of event")
                 return web.Response(status=200)
 
             github_user = event.data["sender"]["login"]
