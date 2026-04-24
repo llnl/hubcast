@@ -88,14 +88,13 @@ async def sync_branch(
     if want_sha in have_shas:
         log.info(
             "Target ref already up-to-date",
-            extra={"repo": src_fullname, "target_ref": target_ref},
+            extra={"target_ref": target_ref},
         )
         return
 
     log.info(
         "Mirroring refs",
         extra={
-            "repo": src_fullname,
             "ref": target_ref,
             "from_sha": from_sha,
             "want_sha": want_sha,
@@ -125,7 +124,6 @@ async def sync_branch(
     log.info(
         "Successfully mirrored refs",
         extra={
-            "repo": src_fullname,
             "ref": target_ref,
             "from_sha": from_sha,
             "want_sha": want_sha,
@@ -156,7 +154,7 @@ async def remove_branch(
     head_sha = gl_refs.get(target_ref)
     null_sha = "0" * 40
 
-    log.info("Deleting ref", extra={"repo": src_fullname, "target_ref": target_ref})
+    log.info("Deleting ref", extra={"target_ref": target_ref})
 
     await send_pack(
         dest_remote_url,
@@ -170,7 +168,7 @@ async def remove_branch(
 
     log.info(
         "Successfully deleted ref",
-        extra={"repo": src_fullname, "target_ref": target_ref},
+        extra={"target_ref": target_ref},
     )
 
 
@@ -211,7 +209,6 @@ async def sync_pr(
         log.warning(
             "Cannot sync pull request from private fork",
             extra={
-                "repo": src_fullname,
                 "pull_request_id": pull_request_id,
                 "fork_fullname": pull_request["head"]["repo"]["full_name"],
             },
@@ -241,7 +238,7 @@ async def sync_pr(
     if want_sha in have_shas:
         log.info(
             "Target ref already up-to-date",
-            extra={"repo": src_fullname, "target_ref": target_ref},
+            extra={"target_ref": target_ref},
         )
         return
 
@@ -269,7 +266,6 @@ async def sync_pr(
     log.info(
         "Mirroring refs",
         extra={
-            "repo": src_fullname,
             "from_sha": from_sha,
             "want_sha": want_sha,
         },
@@ -347,7 +343,7 @@ async def remove_pr(
     head_sha = gl_refs.get(target_ref)
     null_sha = "0" * 40
 
-    log.info("Deleting ref", extra={"repo": src_fullname, "target_ref": target_ref})
+    log.info("Deleting ref", extra={"target_ref": target_ref})
     await send_pack(
         dest_remote_url,
         target_ref,

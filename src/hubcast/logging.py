@@ -31,13 +31,16 @@ LOG_RECORD_BUILTIN_ATTRS = frozenset(
     }
 )
 
-# Context vars to store request metadata for inclusion in logs
-delivery_id_context: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "delivery_id", default=None
+# Context dict to store request metadata for inclusion in logs
+log_context: contextvars.ContextVar[dict[str, any]] = contextvars.ContextVar(
+    "log_context", default={}
 )
-event_type_context: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "event_type", default=None
-)
+
+
+def update_log_context(**fields):
+    """Add or update fields in the log context."""
+    current = log_context.get()
+    log_context.set({**current, **fields})
 
 
 class HubcastJSONFormatter(logging.Formatter):
@@ -121,16 +124,10 @@ class HubcastConsoleFormatter(logging.Formatter):
 
 
 class RequestContextFilter(logging.Filter):
-    """Adds delivery_id and event_type from context to all logs."""
+    """Adds all fields from log_context to all logs."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        # only add fields when they're set to avoid null values
-        delivery_id = delivery_id_context.get()
-        if delivery_id is not None:
-            record.delivery_id = delivery_id
-
-        event_type = event_type_context.get()
-        if event_type is not None:
-            record.event_type = event_type
-
+        context_data = log_context.get()
+        for key, value in context_data.items():
+            setattr(record, key, value)
         return True

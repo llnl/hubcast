@@ -8,7 +8,7 @@ from hubcast.account_map.abc import AccountMap
 from hubcast.clients.github.client import GitHubClientFactory
 from hubcast.clients.gitlab.client import GitLabClientFactory
 from hubcast.exceptions import HubcastError
-from hubcast.logging import delivery_id_context, event_type_context
+from hubcast.logging import log_context, update_log_context
 
 from .routes import router
 
@@ -37,8 +37,12 @@ class GitHubHandler:
             )
 
             # Set request metadata in context
-            delivery_id_context.set(event.delivery_id)
-            event_type_context.set(event.event)
+            log_context.set(
+                {
+                    "delivery_id": event.delivery_id,
+                    "event_type": event.event,
+                }
+            )
 
             log.info("GitHub webhook received")
 
@@ -48,26 +52,25 @@ class GitHubHandler:
                 return web.Response(status=200)
 
             github_user = event.data["sender"]["login"]
-            gitlab_user = self.account_map(github_user)
-            gh_repo_owner = event.data["repository"]["owner"]["login"]
-            gh_repo = event.data["repository"]["name"]
+            gh_repo_org = event.data["repository"]["owner"]["login"]
+            gh_repo_name = event.data["repository"]["name"]
 
-            auth_log_info = {
-                "github_user": github_user,
-                "repo_owner": gh_repo_owner,
-                "repo_name": gh_repo,
-            }
-
-            if gitlab_user is None:
-                log.info("Unauthorized GitHub user", extra=auth_log_info)
-                return web.Response(status=200)
-
-            log.info(
-                "User authorized",
-                extra={**auth_log_info, "gitlab_user": gitlab_user},
+            update_log_context(
+                src_user=github_user,
+                src_repo_org=gh_repo_org,
+                src_repo_name=gh_repo_name,
             )
 
-            gh = self.gh.create_client(gh_repo_owner, gh_repo)
+            gitlab_user = self.account_map(github_user)
+
+            if gitlab_user is None:
+                log.info("Unauthorized GitHub user")
+                return web.Response(status=200)
+
+            update_log_context(dest_user=gitlab_user)
+            log.info("User authorized")
+
+            gh = self.gh.create_client(gh_repo_org, gh_repo_name)
             gl = self.gl.create_client(gitlab_user)
 
             await spawn(request, router.dispatch(event, gh, gl, gitlab_user))
