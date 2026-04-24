@@ -42,21 +42,28 @@ class GitHubHandler:
 
             # GitHub will notify when a repo installs the Hubcast app; we don't need to handle
             if event.event in ("installation", "installation_repositories"):
+                log.info(f"Skipping handling of event: {event.event}")
                 return web.Response(status=200)
 
             github_user = event.data["sender"]["login"]
             gitlab_user = self.account_map(github_user)
-
-            if gitlab_user is None:
-                log.info("Unauthorized GitHub user", extra={"github_user": github_user})
-                return web.Response(status=200)
-            log.info(
-                "User authorized",
-                extra={"github_user": github_user, "gitlab_user": gitlab_user},
-            )
-
             gh_repo_owner = event.data["repository"]["owner"]["login"]
             gh_repo = event.data["repository"]["name"]
+
+            auth_log_info = {
+                "github_user": github_user,
+                "repo_owner": gh_repo_owner,
+                "repo_name": gh_repo,
+            }
+
+            if gitlab_user is None:
+                log.info("Unauthorized GitHub user", extra=auth_log_info)
+                return web.Response(status=200)
+
+            log.info(
+                "User authorized",
+                extra={**auth_log_info, "gitlab_user": gitlab_user},
+            )
 
             gh = self.gh.create_client(gh_repo_owner, gh_repo)
             gl = self.gl.create_client(gitlab_user)
