@@ -1,3 +1,4 @@
+import contextvars
 import datetime as dt
 import json
 import logging
@@ -29,6 +30,17 @@ LOG_RECORD_BUILTIN_ATTRS = frozenset(
         "taskName",
     }
 )
+
+# Context dict to store request metadata for inclusion in logs
+log_context: contextvars.ContextVar[dict[str, any]] = contextvars.ContextVar(
+    "log_context", default={}
+)
+
+
+def update_log_context(**fields):
+    """Add or update fields in the log context."""
+    current = log_context.get()
+    log_context.set({**current, **fields})
 
 
 class HubcastJSONFormatter(logging.Formatter):
@@ -109,3 +121,13 @@ class HubcastConsoleFormatter(logging.Formatter):
             extra_str = ""
 
         return base + extra_str
+
+
+class RequestContextFilter(logging.Filter):
+    """Adds all fields from log_context to all logs."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        context_data = log_context.get()
+        for key, value in context_data.items():
+            setattr(record, key, value)
+        return True

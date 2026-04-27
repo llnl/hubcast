@@ -8,6 +8,7 @@ from hubcast.account_map.abc import AccountMap
 from hubcast.clients.github.client import GitHubClientFactory
 from hubcast.clients.gitlab.client import GitLabClientFactory
 from hubcast.exceptions import HubcastError
+from hubcast.logging import update_log_context
 
 from .routes import router
 
@@ -35,26 +36,36 @@ class GitHubHandler:
                 request.headers, body, secret=self.webhook_secret
             )
 
-            log.info(
-                "GitHub webhook received",
-                extra={"event_type": event.event, "delivery_id": event.delivery_id},
-            )
+            # Set request metadata in context
+            update_log_context(delivery_id=event.delivery_id, event_type=event.event)
+
+            log.info("GitHub webhook received")
 
             # GitHub will notify when a repo installs the Hubcast app; we don't need to handle
             if event.event in ("installation", "installation_repositories"):
+                log.info("Skipping handling of event")
                 return web.Response(status=200)
 
             github_user = event.data["sender"]["login"]
+            gh_repo_org = event.data["repository"]["owner"]["login"]
+            gh_repo_name = event.data["repository"]["name"]
+
+            update_log_context(
+                src_user=github_user,
+                src_repo_org=gh_repo_org,
+                src_repo_name=gh_repo_name,
+            )
+
             gitlab_user = self.account_map(github_user)
 
             if gitlab_user is None:
-                log.info("Unauthorized GitHub user", extra={"github_user": github_user})
+                log.info("Unauthorized GitHub user")
                 return web.Response(status=200)
 
-            gh_repo_owner = event.data["repository"]["owner"]["login"]
-            gh_repo = event.data["repository"]["name"]
+            update_log_context(dest_user=gitlab_user)
+            log.info("User authorized")
 
-            gh = self.gh.create_client(gh_repo_owner, gh_repo)
+            gh = self.gh.create_client(gh_repo_org, gh_repo_name)
             gl = self.gl.create_client(gitlab_user)
 
             await spawn(request, router.dispatch(event, gh, gl, gitlab_user))

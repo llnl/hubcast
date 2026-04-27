@@ -1,6 +1,11 @@
 {
     "version": 1,
     "disable_existing_loggers": false,
+    "filters": {
+        "request_context": {
+            "()": "hubcast.logging.RequestContextFilter"
+        }
+    },
     "formatters": {
         "default": {
             "()": "hubcast.logging.HubcastConsoleFormatter",
@@ -21,12 +26,14 @@
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "default",
-            "stream": "ext://sys.stdout"
+            "stream": "ext://sys.stdout",
+            "filters": ["request_context"]
         },
         "json_stdout": {
             "class": "logging.StreamHandler",
             "formatter": "json",
-            "stream": "ext://sys.stdout"
+            "stream": "ext://sys.stdout",
+            "filters": ["request_context"]
         }
     },
     "root": {
