@@ -8,7 +8,7 @@ from hubcast.account_map.abc import AccountMap
 from hubcast.clients.github.client import GitHubClientFactory
 from hubcast.clients.gitlab.client import GitLabClientFactory
 from hubcast.exceptions import HubcastError
-from hubcast.logging import log_context, update_log_context
+from hubcast.logging import update_log_context
 
 from .routes import router
 
@@ -37,12 +37,7 @@ class GitHubHandler:
             )
 
             # Set request metadata in context
-            log_context.set(
-                {
-                    "delivery_id": event.delivery_id,
-                    "event_type": event.event,
-                }
-            )
+            update_log_context(delivery_id=event.delivery_id, event_type=event.event)
 
             log.info("GitHub webhook received")
 
