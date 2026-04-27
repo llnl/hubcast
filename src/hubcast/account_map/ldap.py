@@ -86,10 +86,10 @@ class LDAPMap(AccountMap):
         try:
             with ldap_connection(self.uri) as conn:
                 if self.bind_dn:
-                    log.debug("performing simple bind", extra={"bind_dn": self.bind_dn})
+                    log.debug("Performing simple bind", extra={"bind_dn": self.bind_dn})
                     conn.simple_bind_s(self.bind_dn, self.bind_password or "")
                 else:
-                    log.debug("performing SASL/GSSAPI bind (kerberos)")
+                    log.debug("Performing SASL/GSSAPI bind (kerberos)")
                     sasl_creds = ldap.sasl.gssapi()
                     conn.sasl_interactive_bind_s("", sasl_creds)
 
@@ -102,7 +102,7 @@ class LDAPMap(AccountMap):
 
             if not result:
                 log.debug(
-                    "no LDAP entry found",
+                    "No LDAP entry found",
                     extra={
                         "base": self.search_base,
                         "filterstr": filterstr,
@@ -116,7 +116,7 @@ class LDAPMap(AccountMap):
             values = attrs.get(self.output_attr)
             if not values:
                 log.error(
-                    "attribute not present in LDAP entry",
+                    "Attribute not present in LDAP entry",
                     extra={
                         "base": self.search_base,
                         "filterstr": filterstr,
