@@ -126,8 +126,13 @@ def load_config() -> Config:
     try:
         return Config.model_validate({})
     except ValidationError as e:
-        errors = "\n".join(
-            f"  {'.'.join(map(str, err['loc']))}: {err['msg']}"
-            for err in e.errors(include_url=False, include_input=False)
-        )
-        raise ConfigError(f"Configuration validation failed:\n{errors}") from None
+        prefix = Config.model_config["env_prefix"]
+        delimiter = Config.model_config["env_nested_delimiter"]
+
+        errors = []
+        for err in e.errors(include_url=False, include_input=False):
+            env_var = prefix + delimiter.join(map(str, err["loc"])).upper()
+            errors.append(f"  {env_var}: {err['msg']}")
+
+        error_msg = "Configuration validation failed:\n" + "\n".join(errors)
+        raise ConfigError(error_msg) from None

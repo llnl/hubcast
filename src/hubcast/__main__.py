@@ -47,8 +47,7 @@ def initialize_logging(conf: Config) -> None:
     config_path = Path(conf.logging_config_path)
     if not config_path.exists():
         log.error(
-            "Logging config file not found",
-            extra={"path": conf.logging_config_path},
+            f"Logging config file not found: {conf.logging_config_path}",
         )
         sys.exit(1)
 
