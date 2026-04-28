@@ -96,9 +96,9 @@ AccountMapConfig = Annotated[
 class Config(BaseSettings):
     """Main application configuration."""
 
+    # limit nesting to 2 levels to avoid using the __ delimiter
     model_config = SettingsConfigDict(
-        env_prefix="HC_",
-        env_nested_delimiter="__",
+        env_prefix="HC_", env_nested_delimiter="_", env_nested_max_split=1
     )
 
     # Port for Hubcast to listen on

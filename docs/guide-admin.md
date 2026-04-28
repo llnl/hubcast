@@ -110,21 +110,21 @@ Hubcast is configured via environment variables. The full set of current options
 
 For details on how to configure each option, see the [account map](#account-maps) documentation.
 
-- `HC_ACCOUNT_MAP__TYPE`: options: `file`, `ldap`
+- `HC_ACCOUNT_MAP_TYPE`: options: `file`, `ldap`
 
 If using the `file` map:
 
-- `HC_ACCOUNT_MAP__PATH`: a path to the YAML file mapping usernames between source and destination forges
+- `HC_ACCOUNT_MAP_PATH`: a path to the YAML file mapping usernames between source and destination forges
 
 If using the `ldap` map:
 
-- `HC_ACCOUNT_MAP__URI`: the URI of the LDAP instance (e.g., ``)
-- `HC_ACCOUNT_MAP__BASE`: the base of the LDAP instance (e.g., ``)
-- `HC_ACCOUNT_MAP__INPUT`: the user's source forge user id (e.g. `githubId`)
-- `HC_ACCOUNT_MAP__OUTPUT`: the user's destination forge user id (e.g., `uid`)
-- `HC_ACCOUNT_MAP__SCOPE`: the [scope of the LDAP search](https://ldap.com/the-ldap-search-operation), specified numerically. options: base (0), one (1), and sub (2).
-- `HC_ACCOUNT_MAP__BIND_DN`: the name of the bind distinguished name (optional)
-- `HC_ACCOUNT_MAP__BIND_PASSWORD`: the bind password (optional)
+- `HC_ACCOUNT_MAP_URI`: the URI of the LDAP instance (e.g., ``)
+- `HC_ACCOUNT_MAP_BASE`: the base of the LDAP instance (e.g., ``)
+- `HC_ACCOUNT_MAP_INPUT`: the user's source forge user id (e.g. `githubId`)
+- `HC_ACCOUNT_MAP_OUTPUT`: the user's destination forge user id (e.g., `uid`)
+- `HC_ACCOUNT_MAP_SCOPE`: the [scope of the LDAP search](https://ldap.com/the-ldap-search-operation), specified numerically. options: base (0), one (1), and sub (2).
+- `HC_ACCOUNT_MAP_BIND_DN`: the name of the bind distinguished name (optional)
+- `HC_ACCOUNT_MAP_BIND_PASSWORD`: the bind password (optional)
 
 If no bind credentials are specified, the mapper will attempt a SASL/GSSAPI (e.g., Kerberos) bind.
 
@@ -132,21 +132,21 @@ If no bind credentials are specified, the mapper will attempt a SASL/GSSAPI (e.g
 
 #### GitHub
 
-- `HC_GH__APP_ID`: the GitHub App ID (provided after creation)
-- `HC_GH__PRIVATE_KEY`: the contents of the app private key file, do not strip any newlines from this string
-- `HC_GH__WEBHOOK_SECRET`: the webhook secret set during the creation of the GitHub App
-- `HC_GH__BOT_CALLER`: how users invoke Hubcast's bot in a PR/MR comment. Can be a user mention (`@lc-hubcast`) or a slash command (`/lc-hubcast`). Defaults to `/hubcast`.
+- `HC_GH_APP_ID`: the GitHub App ID (provided after creation)
+- `HC_GH_PRIVATE_KEY`: the contents of the app private key file, do not strip any newlines from this string
+- `HC_GH_WEBHOOK_SECRET`: the webhook secret set during the creation of the GitHub App
+- `HC_GH_BOT_CALLER`: how users invoke Hubcast's bot in a PR/MR comment. Can be a user mention (`@lc-hubcast`) or a slash command (`/lc-hubcast`). Defaults to `/hubcast`.
 
 ### Destination forge settings (GitLab)
 
-- `HC_GL__URL`: the URL of the GitLab instance (e.g., `https://gitlab.com`)
-- `HC_GL__TOKEN_TYPE`: options: `impersonation` (default) or `single`. see [details](#gitlab-as-a-destination-forge) on each token type.
-- `HC_GL__TOKEN`: the value of the token -- the scope will depend on the type of token created
+- `HC_GL_URL`: the URL of the GitLab instance (e.g., `https://gitlab.com`)
+- `HC_GL_TOKEN_TYPE`: options: `impersonation` (default) or `single`. see [details](#gitlab-as-a-destination-forge) on each token type.
+- `HC_GL_TOKEN`: the value of the token -- the scope will depend on the type of token created
 
 Hubcast will create a webhook for each repository to report CI results back to the source forge.
 
-- `HC_GL__WEBHOOK_SECRET`: choose a secure, password-like string for webhook verification
-- `HC_GL__CALLBACK_URL`: the URL Hubcast will receive events from (e.g., `https://hubcast.example.com/v1/events/dest/gitlab`)
+- `HC_GL_WEBHOOK_SECRET`: choose a secure, password-like string for webhook verification
+- `HC_GL_CALLBACK_URL`: the URL Hubcast will receive events from (e.g., `https://hubcast.example.com/v1/events/dest/gitlab`)
 
 ## Running
 
