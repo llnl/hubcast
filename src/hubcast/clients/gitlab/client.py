@@ -67,9 +67,9 @@ class GitLabClient:
 
         # Generate unique signed token for this webhook containing routing information.
         # This token serves as the GitLab webhook secret and encodes routing information
-        # (GitHub owner, repo, check name) in a tamper-proof JWT format. When GitLab sends
-        # webhook events, we validate this token to extract routing details and determine
-        # where to report CI status back to GitHub.
+        # (GitHub owner, repo, check name) in a tamper-proof JWT format. When GitLab
+        # sends webhook events, we validate this token to extract routing details and
+        # determine where to report CI status back to GitHub.
         required_fields = {"gh_owner", "gh_repo", "gh_check"}
         missing_fields = required_fields - data.keys()
         if missing_fields:
@@ -78,7 +78,8 @@ class GitLabClient:
                 "Expected keys: gh_owner, gh_repo, gh_check"
             )
 
-        # Must be present in JWT_ALGORITHMS in src/hubcast/web/gitlab/routing_token.py
+        # Algorithm must be present in JWT_ALGORITHMS in
+        # src/hubcast/web/gitlab/routing_token.py for decode
         token = jwt.encode(data, self.webhook_secret, algorithm="HS256")
 
         new_hook = {
