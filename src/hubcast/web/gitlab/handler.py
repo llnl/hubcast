@@ -7,8 +7,8 @@ from gidgetlab.exceptions import ValidationFailure
 
 from hubcast.clients.github import GitHubClientFactory
 from hubcast.exceptions import HubcastError
-from hubcast.web.utils import RoutingTokenError, validate_routing_token
 
+from .routing_token import RoutingTokenError, validate_routing_token
 from .routes import router
 
 log = logging.getLogger(__name__)

@@ -3,8 +3,7 @@ import urllib.parse
 
 import aiohttp
 import gidgetlab
-
-from hubcast.web.utils import generate_routing_token
+import jwt
 
 from .auth import GitLabAuthenticator, GitLabSingleUserAuthenticator
 
@@ -67,18 +66,16 @@ class GitLabClient:
         gl_token = await self.auth.authenticate_user(username=self.user)
 
         # Generate unique signed token for this webhook containing routing information
-        try:
-            token = generate_routing_token(
-                self.webhook_secret,
-                data["gh_owner"],
-                data["gh_repo"],
-                data["gh_check"],
-            )
-        except KeyError as e:
+        required_fields = {"gh_owner", "gh_repo", "gh_check"}
+        missing_fields = required_fields - data.keys()
+        if missing_fields:
             raise ValueError(
-                f"Missing required webhook data field: {e}. "
+                f"Missing required webhook data fields: {', '.join(sorted(missing_fields))}. "
                 "Expected keys: gh_owner, gh_repo, gh_check"
-            ) from e
+            )
+
+        # Must be present in JWT_ALGORITHMS in src/hubcast/web/gitlab/routing_token.py
+        token = jwt.encode(data, self.webhook_secret, algorithm="HS256")
 
         new_hook = {
             "token": token,
