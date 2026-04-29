@@ -12,7 +12,13 @@ from hubcast.account_map.abc import AccountMap
 from hubcast.account_map.file import FileMapError
 from hubcast.clients.github import GitHubClientFactory
 from hubcast.clients.gitlab import GitLabClientFactory
-from hubcast.config import Config, ConfigError
+from hubcast.config import (
+    Config,
+    ConfigError,
+    FileAccountMapConfig,
+    LDAPAccountMapConfig,
+    load_config,
+)
 from hubcast.web.github import GitHubHandler
 from hubcast.web.gitlab import GitLabHandler
 from hubcast.web.health import health_check
@@ -41,8 +47,7 @@ def initialize_logging(conf: Config) -> None:
     config_path = Path(conf.logging_config_path)
     if not config_path.exists():
         log.error(
-            "Logging config file not found",
-            extra={"path": conf.logging_config_path},
+            f"Logging config file not found: {conf.logging_config_path}",
         )
         sys.exit(1)
 
@@ -63,15 +68,15 @@ def initialize_logging(conf: Config) -> None:
 
 def initialize_account_map(conf: Config) -> AccountMap:
     """Initialize and return the appropriate account map based on config."""
-    match conf.account_map_type:
-        case "file":
+    match conf.account_map:
+        case FileAccountMapConfig(path=path):
             try:
-                return FileMap(conf.account_map_path)
+                return FileMap(path)
             except FileMapError:
                 log.exception("Error initializing file account map")
                 sys.exit(1)
 
-        case "ldap":
+        case LDAPAccountMapConfig() as ldap_config:
             if not LDAP_AVAILABLE:
                 log.error(
                     "LDAP account map requested but python-ldap is not installed. "
@@ -80,28 +85,21 @@ def initialize_account_map(conf: Config) -> AccountMap:
                 )
                 sys.exit(1)
             return LDAPMap(
-                conf.ldap_map_uri,
-                conf.ldap_map_base,
-                conf.ldap_map_input,
-                conf.ldap_map_output,
-                conf.ldap_map_scope,
-                conf.ldap_map_bind_dn,
-                conf.ldap_map_bind_password,
+                ldap_config.uri,
+                ldap_config.base,
+                ldap_config.input,
+                ldap_config.output,
+                ldap_config.scope,
+                ldap_config.bind_dn,
+                ldap_config.bind_password,
             )
-
-        case _:
-            log.error(
-                "Unknown account map type",
-                extra={"account_map_type": conf.account_map_type},
-            )
-            sys.exit(1)
 
 
 def main():
     app = web.Application()
 
     try:
-        conf = Config()
+        conf = load_config()
     except ConfigError as exc:
         log.error(exc)
         sys.exit(1)
@@ -109,12 +107,11 @@ def main():
     initialize_logging(conf)
 
     account_map = initialize_account_map(conf)
-
     gh_client_factory = GitHubClientFactory(
-        conf.gh.app_id, conf.gh.privkey, REQUESTER, conf.gh.bot_caller
+        conf.gh.app_id, conf.gh.private_key, REQUESTER, conf.gh.bot_caller
     )
     gl_client_factory = GitLabClientFactory(
-        conf.gl.instance_url,
+        conf.gl.url,
         REQUESTER,
         conf.gl.token,
         conf.gl.callback_url,

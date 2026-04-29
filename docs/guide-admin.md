@@ -118,13 +118,13 @@ If using the `file` map:
 
 If using the `ldap` map:
 
-- `HC_LDAP_MAP_URI`: the URI of the LDAP instance (e.g., ``)
-- `HC_LDAP_MAP_BASE`: the base of the LDAP instance (e.g., ``)
-- `HC_LDAP_MAP_INPUT`: the user's source forge user id (e.g. `githubId`)
-- `HC_LDAP_MAP_OUTPUT`: the user's destination forge user id (e.g., `uid`)
-- `HC_LDAP_MAP_SCOPE`: the [scope of the LDAP search](https://ldap.com/the-ldap-search-operation), specified numerically. options: base (0), one (1), and sub (2).
-- `HC_LDAP_MAP_BIND_DN`: the name of the bind distinguished name (optional)
-- `HC_LDAP_MAP_BIND_PASSWORD`: the bind password (optional)
+- `HC_ACCOUNT_MAP_URI`: the URI of the LDAP instance (e.g., ``)
+- `HC_ACCOUNT_MAP_BASE`: the base of the LDAP instance (e.g., ``)
+- `HC_ACCOUNT_MAP_INPUT`: the user's source forge user id (e.g. `githubId`)
+- `HC_ACCOUNT_MAP_OUTPUT`: the user's destination forge user id (e.g., `uid`)
+- `HC_ACCOUNT_MAP_SCOPE`: the [scope of the LDAP search](https://ldap.com/the-ldap-search-operation), specified numerically. options: base (0), one (1), and sub (2).
+- `HC_ACCOUNT_MAP_BIND_DN`: the name of the bind distinguished name (optional)
+- `HC_ACCOUNT_MAP_BIND_PASSWORD`: the bind password (optional)
 
 If no bind credentials are specified, the mapper will attempt a SASL/GSSAPI (e.g., Kerberos) bind.
 
@@ -132,10 +132,10 @@ If no bind credentials are specified, the mapper will attempt a SASL/GSSAPI (e.g
 
 #### GitHub
 
-- `HC_GH_APP_IDENTIFIER`: the GitHub App ID (provided after creation)
+- `HC_GH_APP_ID`: the GitHub App ID (provided after creation)
 - `HC_GH_PRIVATE_KEY`: the contents of the app private key file, do not strip any newlines from this string
-- `HC_GH_SECRET`: the webhook secret set during the creation of the GitHub App
-- `HC_GH_BOT_USER`: users can tag an account to perform actions within the context of a pull request (e.g., `@lc-hubcast help`). if this is not specified, the prefix will default to `/hubcast`
+- `HC_GH_WEBHOOK_SECRET`: the webhook secret set during the creation of the GitHub App
+- `HC_GH_BOT_CALLER`: how users invoke Hubcast's bot in a PR/MR comment. Can be a user mention (`@lc-hubcast`) or a slash command (`/lc-hubcast`). Defaults to `/hubcast`.
 
 ### Destination forge settings (GitLab)
 
@@ -145,7 +145,7 @@ If no bind credentials are specified, the mapper will attempt a SASL/GSSAPI (e.g
 
 Hubcast will create a webhook for each repository to report CI results back to the source forge.
 
-- `HC_GL_SECRET`: choose a secure, password-like string for webhook verification
+- `HC_GL_WEBHOOK_SECRET`: choose a secure, password-like string for webhook verification
 - `HC_GL_CALLBACK_URL`: the URL Hubcast will receive events from (e.g., `https://hubcast.example.com/v1/events/dest/gitlab`)
 
 ## Running
