@@ -2,7 +2,7 @@ import logging
 import urllib.parse
 
 import aiohttp
-import gidgetlab
+import gidgetlab.aiohttp
 
 from hubcast.web.utils import generate_routing_token
 

@@ -18,15 +18,24 @@ jobs:
           cache: 'pip'
           cache-dependency-path: '.github/workflows/requirements/style.txt'
 
+      - name: Install system dependencies for LDAP
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libldap2-dev libsasl2-dev libssl-dev
+
       - name: Install Python dependencies
         run: |
           pip install -r .github/workflows/requirements/style.txt
+          pip install -e .[ldap]
 
       - name: Run Ruff
         run: |
           ruff check --diff
           ruff check --select I --diff
           ruff format --check --diff
+
+      - name: Run Type Checker
+        run: ty check
 
       - name: Run Typos
         run: typos

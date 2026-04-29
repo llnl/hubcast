@@ -73,16 +73,17 @@ class LDAPMap(AccountMap):
         self.bind_dn = bind_dn
         self.bind_password = bind_password
 
-    def __call__(self, input_val: str) -> str | None:
+    def __call__(self, source_user: str) -> str | None:
+        # TODO make this a standalone method to make it generic???
         """
-        searches the LDAP endpoint for input_val within the search_base and returns
+        searches the LDAP endpoint for source_user within the search_base and returns
         the value of output_attr.
         Simple bind auth is used if bind_dn is set; otherwise uses SASL/GSSAPI (kerberos).
 
         Returns None if not found or on error.
         """
 
-        filterstr = f"({self.input_attr}={input_val})"
+        filterstr = f"({self.input_attr}={source_user})"
         try:
             with ldap_connection(self.uri) as conn:
                 if self.bind_dn:

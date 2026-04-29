@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from typing import Iterable
 
 import aiohttp
 import gidgetlab.aiohttp
@@ -34,7 +35,7 @@ class GitLabAuthenticator:
     async def authenticate_user(
         self,
         username: str,
-        scopes: list[str] = GL_SCOPES,
+        scopes: Iterable[str] = GL_SCOPES,
         expire_days: int = 1,
     ) -> str:
         """

@@ -131,7 +131,7 @@ def load_config() -> Config:
 
         errors = []
         for err in e.errors(include_url=False, include_input=False):
-            env_var = prefix + delimiter.join(map(str, err["loc"])).upper()
+            env_var = prefix + (delimiter or "_").join(map(str, err["loc"])).upper()
             errors.append(f"  {env_var}: {err['msg']}")
 
         error_msg = "Configuration validation failed:\n" + "\n".join(errors)
