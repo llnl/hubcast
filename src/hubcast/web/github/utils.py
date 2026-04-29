@@ -42,13 +42,7 @@ async def get_repo_config(
             )
 
         try:
-            config = RepoConfig.from_yaml_data(config_yaml["Repo"])
-        except KeyError as e:
-            raise HubcastError(
-                f"Repo config for {fullname} is missing required key: {e}",
-                log_level="INFO",
-                repo=fullname,
-            ) from None
+            config = RepoConfig.model_validate(config_yaml)
         except ValueError as e:
             raise HubcastError(
                 f"Invalid repo config for {fullname}: {e}",

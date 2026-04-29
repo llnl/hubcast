@@ -1,10 +1,12 @@
-from dataclasses import MISSING, dataclass, fields
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict, model_validator
 
-@dataclass(slots=True, frozen=True)
-class RepoConfig:
-    """Source repository configuration for mirroring and status checks"""
+
+class RepoConfig(BaseModel):
+    """Repository configuration for mirroring and status checks"""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
 
     # destination org and repository to sync into
     dest_org: str
@@ -29,31 +31,18 @@ class RepoConfig:
     # synthetic merge commits between the branch and the default branch
     create_mr: bool = False
 
+    @model_validator(mode="before")
     @classmethod
-    def from_yaml_data(cls, repo_data: dict[str, Any]) -> "RepoConfig":
-        """Create a RepoConfig from YAML data, using field defaults for missing values.
-
-        Args:
-            repo_data: Dictionary containing configuration values from YAML
-
-        Returns:
-            RepoConfig instance
+    def extract_repo_section(cls, data: Any) -> Any:
+        """Extract the 'Repo' key from the YAML structure.
 
         Raises:
-            ValueError: If required fields are missing
+            ValueError: If data is a dict but missing the 'Repo' key
         """
-        # Get required fields (those without defaults)
-        required_fields = {
-            f.name
-            for f in fields(cls)
-            if f.default is MISSING and f.default_factory is MISSING
-        }
-        missing = required_fields - repo_data.keys()
-        if missing:
-            raise ValueError(f"Missing required fields: {', '.join(sorted(missing))}")
+        if isinstance(data, dict):
+            if "Repo" not in data:
+                raise ValueError("Configuration must have a top-level 'Repo' section")
+            return data["Repo"]
 
-        # Build kwargs from YAML data, using only fields that exist in the dataclass
-        field_names = {f.name for f in fields(cls)}
-        kwargs = {key: value for key, value in repo_data.items() if key in field_names}
-
-        return cls(**kwargs)
+        # fallback to Pydantic's other validators if the input data isn't a dict
+        return data
