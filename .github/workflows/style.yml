@@ -21,12 +21,16 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install -r .github/workflows/requirements/style.txt
+          pip install -e .[ldap]
 
       - name: Run Ruff
         run: |
           ruff check --diff
           ruff check --select I --diff
           ruff format --check --diff
+
+      - name: Run Type Checker
+        run: ty check
 
       - name: Run Typos
         run: typos

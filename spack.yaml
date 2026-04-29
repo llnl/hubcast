@@ -10,6 +10,7 @@ spack:
   - py-hubcast
   - py-bandit
   - py-ruff
+  - py-ty
   - smee-client
   - typos
   view: true

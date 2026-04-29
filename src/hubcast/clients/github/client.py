@@ -78,7 +78,7 @@ class GitHubClient:
 
         """
         # construct upload payload
-        payload = {
+        payload: dict[str, Any] = {
             "name": check_name,
             "head_sha": ref,
         }

@@ -2,6 +2,7 @@ import contextvars
 import datetime as dt
 import json
 import logging
+from typing import Any
 
 LOG_RECORD_BUILTIN_ATTRS = frozenset(
     {
@@ -32,7 +33,7 @@ LOG_RECORD_BUILTIN_ATTRS = frozenset(
 )
 
 # Context dict to store request metadata for inclusion in logs
-log_context: contextvars.ContextVar[dict[str, any]] = contextvars.ContextVar(
+log_context: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
     "log_context", default={}
 )
 

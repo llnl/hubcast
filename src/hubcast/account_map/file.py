@@ -40,8 +40,8 @@ class FileMap(AccountMap):
         except yaml.YAMLError:
             raise FileMapError(f"Failed to parse file map. path={path}")
 
-    def __call__(self, github_user: str) -> str | None:
+    def __call__(self, source_user: str) -> str | None:
         """
-        Return the gitlab_user for a github_user if one exists.
+        Return the destination forge user for a source forge user if one exists.
         """
-        return self.users.get(github_user)
+        return self.users.get(source_user)

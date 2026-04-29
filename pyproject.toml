@@ -42,7 +42,10 @@ ldap = [
 dev = [
     "pytest",
     "pytest-asyncio",
-    "pytest-mock"
+    "pytest-mock",
+    "ruff",
+    "ty",
+    "typos"
 ]
 
 [tool.pytest.ini_options]
@@ -53,6 +56,15 @@ pythonpath = [
 [tool.ruff]
 line-length = 88
 exclude = ["spack"]
+
+[tool.ty.src]
+# exclude spack directory from type checking
+exclude = ["spack/**"]
+
+# python-ldap is a C extension without type stubs
+[[tool.ty.overrides]]
+include = ["src/hubcast/account_map/ldap.py"]
+rules = { unresolved-attribute = "ignore" }
 
 [tool.bandit]
 exclude_dirs = []

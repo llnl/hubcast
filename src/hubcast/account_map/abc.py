@@ -4,12 +4,13 @@ from abc import ABC, abstractmethod
 class AccountMap(ABC):
     """
     An abstract interface defining an account map.
+    Maps usernames from a source forge to a destination forge.
     """
 
     @abstractmethod
-    def __call__(self, github_user: str) -> str | None:
+    def __call__(self, source_user: str) -> str | None:
         """
-        Return the coorisponding gitlab_user for a given github_user if
-        one exists.
+        Return the corresponding destination forge user for a given source forge user
+        if one exists.
         """
         pass
