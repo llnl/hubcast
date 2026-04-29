@@ -2,30 +2,52 @@ import os
 
 import pytest
 
-from hubcast.config import ConfigError, env_get
+from hubcast.config import Config, ConfigError
 
 
-def test_env_get_var_or_default():
-    """Should return the environment variable if set, else the default."""
+def test_load_config_missing_required():
+    """Should raise ConfigError if required environment variables are missing."""
 
-    os.environ["TEST_ENV_VAR"] = "value_from_env"
-    assert (
-        env_get("TEST_ENV_VAR", default="default_value", optional=True)
-        == "value_from_env"
-    )
-    del os.environ["TEST_ENV_VAR"]
-    assert (
-        env_get("TEST_ENV_VAR", default="default_value", optional=True)
-        == "default_value"
-    )
+    # Clear any existing config env vars
+    env_vars_to_clear = [
+        key for key in os.environ if key.startswith("HC_")
+    ]
+    original_values = {}
+    for key in env_vars_to_clear:
+        original_values[key] = os.environ.pop(key)
+
+    try:
+        with pytest.raises(ConfigError, match="Configuration validation failed"):
+            from hubcast.config import load_config
+            load_config()
+    finally:
+        # Restore original values
+        for key, value in original_values.items():
+            os.environ[key] = value
 
 
-def test_env_get_missing():
-    """Should raise ConfigError if the environment variable is missing and no default is provided."""
+def test_config_with_env_vars():
+    """Should load config from environment variables."""
 
-    if "MISSING_ENV_VAR" in os.environ:
-        del os.environ["MISSING_ENV_VAR"]
+    # Set minimal required env vars
+    os.environ["HC_GH_APP_ID"] = "123456"
+    os.environ["HC_GH_PRIVATE_KEY"] = "test-key"
+    os.environ["HC_GH_WEBHOOK_SECRET"] = "test-secret"
+    os.environ["HC_GL_URL"] = "https://gitlab.com"
+    os.environ["HC_GL_TOKEN"] = "test-token"
+    os.environ["HC_GL_WEBHOOK_SECRET"] = "test-secret"
+    os.environ["HC_GL_CALLBACK_URL"] = "https://example.com/callback"
+    os.environ["HC_ACCOUNT_MAP_TYPE"] = "file"
+    os.environ["HC_ACCOUNT_MAP_PATH"] = "/tmp/map.yaml"
 
-    # succeed if ConfigError is raised
-    with pytest.raises(ConfigError):
-        env_get("MISSING_ENV_VAR")
+    try:
+        config = Config.model_validate({})
+        assert config.gh.app_id == "123456"
+        assert config.gh.private_key == "test-key"
+        assert config.gl.url == "https://gitlab.com"
+        assert config.account_map.type == "file"
+    finally:
+        # Clean up
+        for key in list(os.environ.keys()):
+            if key.startswith("HC_"):
+                del os.environ[key]
