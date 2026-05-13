@@ -32,7 +32,7 @@ def clear_config_cache():
 def test_create_config_minimal():
     """Should create RepoConfig with minimal settings."""
 
-    config = RepoConfig.from_yaml_data({"dest_org": "owner", "dest_name": "repo"})
+    config = RepoConfig.model_validate({"Repo": {"dest_org": "owner", "dest_name": "repo"}})
 
     assert config.dest_org == "owner"
     assert config.dest_name == "repo"
@@ -43,12 +43,14 @@ def test_create_config_minimal():
 def test_create_config_full():
     """Should create RepoConfig with all settings."""
 
-    config = RepoConfig.from_yaml_data(
+    config = RepoConfig.model_validate(
         {
-            "dest_org": "owner",
-            "dest_name": "repo",
-            "sync_drafts": False,
-            "sync_drafts_msg": False,
+            "Repo": {
+                "dest_org": "owner",
+                "dest_name": "repo",
+                "sync_drafts": False,
+                "sync_drafts_msg": False,
+            }
         }
     )
 
@@ -121,7 +123,7 @@ async def test_get_repo_config_missing_repo_key():
     gh.repo_owner = "owner"
     gh.repo_name = "repo"
 
-    with pytest.raises(HubcastError, match="missing required key"):
+    with pytest.raises(HubcastError, match="top-level 'Repo' section"):
         await get_repo_config(gh, "owner/repo")
 
 
@@ -134,5 +136,5 @@ async def test_get_repo_config_missing_required_fields():
     gh.repo_owner = "owner"
     gh.repo_name = "repo"
 
-    with pytest.raises(HubcastError, match="Missing required fields: dest_name"):
+    with pytest.raises(HubcastError, match="Field required"):
         await get_repo_config(gh, "owner/repo")
