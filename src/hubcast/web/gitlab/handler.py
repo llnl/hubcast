@@ -7,7 +7,7 @@ from gidgetlab.exceptions import ValidationFailure
 
 from hubcast.clients.github import GitHubClientFactory
 from hubcast.exceptions import HubcastError
-from hubcast.webhooks import WebhookData, WebhookValidationError
+from hubcast.webhook import RoutingToken, RoutingTokenError
 
 from .routes import router
 
@@ -28,14 +28,14 @@ class GitLabHandler:
 
             # Validate token signature and extract routing information
             try:
-                webhook_data = WebhookData.decode(self.webhook_secret, token)
-            except WebhookValidationError as e:
+                routing_token = RoutingToken.decode(self.webhook_secret, token)
+            except RoutingTokenError as e:
                 e.log(log)
                 return web.Response(status=401, text="Unauthorized")
 
-            gh_repo_owner = webhook_data.gh_owner
-            gh_repo = webhook_data.gh_repo
-            gh_check_name = webhook_data.gh_check
+            gh_repo_owner = routing_token.gh_owner
+            gh_repo = routing_token.gh_repo
+            gh_check_name = routing_token.gh_check
 
             body = await request.read()
 

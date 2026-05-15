@@ -10,7 +10,6 @@ from hubcast.clients.gitlab.client import GitLabClient
 from hubcast.exceptions import HubcastError
 from hubcast.web import comments
 from hubcast.web.github.utils import get_repo_config
-from hubcast.webhooks import WebhookData
 
 log = logging.getLogger(__name__)
 
@@ -72,15 +71,12 @@ async def sync_branch(
     # only set/update webhook on default branch pushes when config cache was bypassed (refresh or initial fetch)
     if fetched and is_default_branch:
         # setup callback webhook on GitLab
-        webhook_data = WebhookData(
-            gh_owner=src_owner,
-            gh_repo=src_repo_name,
-            gh_check=repo_config.check_name,
-        )
         await gl.set_webhook(
             dest_org=repo_config.dest_org,
             dest_repo=repo_config.dest_name,
-            webhook_data=webhook_data,
+            gh_owner=src_owner,
+            gh_repo=src_repo_name,
+            gh_check=repo_config.check_name,
         )
 
     # sync commits from GitHub -> GitLab
