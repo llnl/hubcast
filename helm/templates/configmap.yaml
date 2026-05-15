@@ -1,0 +1,14 @@
+{{- if eq .Values.hubcast.accountMapType "file" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hubcast.fullname" . }}
+  labels:
+    {{- include "hubcast.labels" . | nindent 4 }}
+data:
+  users.yml: |
+    Users:
+    {{- range $github, $gitlab := .Values.hubcast.accountMap.users }}
+      {{ $github }}: {{ $gitlab }}
+    {{- end }}
+{{- end }}

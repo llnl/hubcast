@@ -1,0 +1,57 @@
+# OpenShift with LDAP account mapping values for Hubcast
+# This file contains OpenShift-specific settings with LDAP for account mapping
+# Usage: helm install hubcast . -f values-openshift-ldap.yaml
+
+# OpenShift assigns UIDs dynamically, so don't set a specific user
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: null
+
+# Use OpenShift Route instead of Kubernetes Ingress
+ingress:
+  enabled: false
+
+route:
+  enabled: true
+  hosts:
+    - hubcast.apps.your-openshift-cluster.com
+  tls:
+    enabled: true
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+
+# OpenShift configuration with LDAP
+hubcast:
+  github:
+    appId: "123456"
+    botUser: "/hubcast"
+
+  gitlab:
+    url: "https://gitlab.com"
+    tokenType: "impersonation"
+    callbackUrl: "https://hubcast.apps.your-openshift-cluster.com/v1/events/dest/gitlab"
+
+  # Use LDAP for account mapping
+  accountMapType: "ldap"
+
+  ldap:
+    uri: "ldap://ldap.example.com:389"
+    base: "ou=users,dc=example,dc=com"
+    input: "uid"
+    output: "gitlabUsername"
+    scope: 2
+    bindDn: "cn=hubcast,ou=serviceaccounts,dc=example,dc=com"
+
+# For production, create secrets externally:
+# oc create secret generic hubcast-secrets \
+#   --from-file=HC_GH_WEBHOOK_SECRET=github-webhook-secret.txt \
+#   --from-file=HC_GH_PRIVATE_KEY=github-app.pem \
+#   --from-file=HC_GL_WEBHOOK_SECRET=gitlab-webhook-secret.txt \
+#   --from-file=HC_GL_TOKEN=gitlab-token.txt \
+#   --from-file=HC_ACCOUNT_MAP_BIND_PASSWORD=ldap-bind-password.txt
+#
+# Note: Files used with --from-file should not contain trailing newlines.
+# Remove them with: echo -n "$(cat github-webhook-secret.txt)" > github-webhook-secret.txt
+#
+# Then reference:
+# existingSecret: "hubcast-secrets"

@@ -1,0 +1,19 @@
+apiVersion: v2
+name: hubcast
+description: A Helm chart for deploying Hubcast - an event driven GitHub to GitLab mirroring application
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - hubcast
+  - github
+  - gitlab
+  - mirror
+home: https://github.com/llnl/hubcast
+sources:
+  - https://github.com/llnl/hubcast
+maintainers:
+  - name: Alec Scott
+    url: https://github.com/alecbcs
+  - name: Caetano Melone
+    url: https://github.com/cmelone

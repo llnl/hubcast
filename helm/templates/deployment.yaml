@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hubcast.fullname" . }}
+  labels:
+    {{- include "hubcast.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "hubcast.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "hubcast.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: hubcast
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ .Chart.Name }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: {{ include "hubcast.image" . | quote }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.hubcast.port }}
+          protocol: TCP
+        env:
+        # General Settings
+        - name: HC_PORT
+          value: {{ .Values.hubcast.port | quote }}
+        {{- if .Values.hubcast.loggingConfigPath }}
+        - name: HC_LOGGING_CONFIG_PATH
+          value: {{ .Values.hubcast.loggingConfigPath | quote }}
+        {{- end }}
+
+        # Account Map Type
+        - name: HC_ACCOUNT_MAP_TYPE
+          value: {{ .Values.hubcast.accountMapType | quote }}
+
+        {{- if eq .Values.hubcast.accountMapType "file" }}
+        # File-based Account Map Settings
+        - name: HC_ACCOUNT_MAP_PATH
+          value: {{ .Values.hubcast.accountMap.path | quote }}
+        {{- end }}
+
+        {{- if eq .Values.hubcast.accountMapType "ldap" }}
+        # LDAP Account Map Settings
+        - name: HC_ACCOUNT_MAP_URI
+          value: {{ .Values.hubcast.ldap.uri | quote }}
+        - name: HC_ACCOUNT_MAP_BASE
+          value: {{ .Values.hubcast.ldap.base | quote }}
+        - name: HC_ACCOUNT_MAP_INPUT
+          value: {{ .Values.hubcast.ldap.input | quote }}
+        - name: HC_ACCOUNT_MAP_OUTPUT
+          value: {{ .Values.hubcast.ldap.output | quote }}
+        - name: HC_ACCOUNT_MAP_SCOPE
+          value: {{ .Values.hubcast.ldap.scope | quote }}
+        {{- if .Values.hubcast.ldap.bindDn }}
+        - name: HC_ACCOUNT_MAP_BIND_DN
+          value: {{ .Values.hubcast.ldap.bindDn | quote }}
+        {{- end }}
+        {{- end }}
+
+        # GitHub Settings
+        - name: HC_GH_APP_ID
+          value: {{ .Values.hubcast.github.appId | quote }}
+        - name: HC_GH_BOT_CALLER
+          value: {{ .Values.hubcast.github.botUser | quote }}
+
+        # GitLab Settings
+        - name: HC_GL_URL
+          value: {{ .Values.hubcast.gitlab.url | quote }}
+        - name: HC_GL_TOKEN_TYPE
+          value: {{ .Values.hubcast.gitlab.tokenType | quote }}
+        - name: HC_GL_CALLBACK_URL
+          value: {{ .Values.hubcast.gitlab.callbackUrl | quote }}
+
+        # Load all secrets from secret
+        envFrom:
+        - secretRef:
+            name: {{ include "hubcast.secretName" . }}
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        {{- if eq .Values.hubcast.accountMapType "file" }}
+        volumeMounts:
+        - name: config
+          mountPath: /config
+          readOnly: true
+        {{- end }}
+      {{- if eq .Values.hubcast.accountMapType "file" }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "hubcast.fullname" . }}
+      {{- end }}
