@@ -71,12 +71,13 @@ async def sync_branch(
     # only set/update webhook on default branch pushes when config cache was bypassed (refresh or initial fetch)
     if fetched and is_default_branch:
         # setup callback webhook on GitLab
-        webhook_data = {
-            "gh_owner": src_owner,
-            "gh_repo": src_repo_name,
-            "gh_check": repo_config.check_name,
-        }
-        await gl.set_webhook(dest_fullname, webhook_data)
+        await gl.set_webhook(
+            dest_org=repo_config.dest_org,
+            dest_repo=repo_config.dest_name,
+            gh_owner=src_owner,
+            gh_repo=src_repo_name,
+            gh_check=repo_config.check_name,
+        )
 
     # sync commits from GitHub -> GitLab
     gl_token = await gl.auth.authenticate_user(gl_user)

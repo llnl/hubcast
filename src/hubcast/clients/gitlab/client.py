@@ -4,9 +4,11 @@ import urllib.parse
 import aiohttp
 import gidgetlab.aiohttp
 
-from hubcast.web.utils import generate_routing_token
-
-from .auth import GitLabAuthenticator, GitLabSingleUserAuthenticator
+from hubcast.clients.gitlab.auth import (
+    GitLabAuthenticator,
+    GitLabSingleUserAuthenticator,
+)
+from hubcast.webhook import RoutingToken
 
 log = logging.getLogger(__name__)
 
@@ -63,22 +65,24 @@ class GitLabClient:
         self.webhook_secret = webhook_secret
         self.user = user
 
-    async def set_webhook(self, gl_fullname: str, data: dict[str, str]) -> None:
+    async def set_webhook(
+        self,
+        dest_org: str,
+        dest_repo: str,
+        gh_owner: str,
+        gh_repo: str,
+        gh_check: str,
+    ) -> None:
         gl_token = await self.auth.authenticate_user(username=self.user)
+        gl_fullname = f"{dest_org}/{dest_repo}"
 
         # Generate unique signed token for this webhook containing routing information
-        try:
-            token = generate_routing_token(
-                self.webhook_secret,
-                data["gh_owner"],
-                data["gh_repo"],
-                data["gh_check"],
-            )
-        except KeyError as e:
-            raise ValueError(
-                f"Missing required webhook data field: {e}. "
-                "Expected keys: gh_owner, gh_repo, gh_check"
-            ) from e
+        routing_token = RoutingToken(
+            gh_owner=gh_owner,
+            gh_repo=gh_repo,
+            gh_check=gh_check,
+        )
+        token = routing_token.encode(self.webhook_secret)
 
         new_hook = {
             "token": token,
@@ -101,8 +105,6 @@ class GitLabClient:
             # temporary fix to support gitlab deployments in sub-paths
             gl.api_url = f"{self.instance_url}/api/v4/"
 
-            existing_hook = None
-
             repo_id = urllib.parse.quote_plus(gl_fullname)
             url = f"/projects/{repo_id}/hooks"
             try:
@@ -114,6 +116,9 @@ class GitLabClient:
                         extra={"user": self.user, "repo": gl_fullname},
                     )
                     return
+                raise
+
+            existing_hook = None
             for hook in hooks_data:
                 if hook["name"] == "hubcast":
                     existing_hook = hook
@@ -124,18 +129,9 @@ class GitLabClient:
                 await gl.post(url, data=new_hook)
                 return
 
-            # if an existing hook is found compare the values of it
-            # and the newly generated hook, update the hook to match
-            # the new configuration if they differ
-            changed = False
-            for key in new_hook.keys():
-                if key != "token" and existing_hook[key] != new_hook[key]:
-                    changed = True
-                    break
-
-            if changed:
-                url = f"/projects/{repo_id}/hooks/{existing_hook['id']}"
-                await gl.put(url, data=new_hook)
+            # otherwise update the existing hook with the new config
+            url = f"/projects/{repo_id}/hooks/{existing_hook['id']}"
+            await gl.put(url, data=new_hook)
 
     async def get_latest_pipeline(self, gl_fullname: str, ref: str) -> int:
         """gets the latest pipeline for an arbitrary GitLab repository and branch.
