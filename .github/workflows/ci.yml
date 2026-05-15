@@ -22,6 +22,7 @@ jobs:
       security: ${{ steps.filter.outputs.security }}
       unit-tests: ${{ steps.filter.outputs.unit-tests }}
       container: ${{ steps.filter.outputs.container }}
+      helm: ${{ steps.filter.outputs.helm }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # @v2
         if: ${{ github.event_name == 'push' }}
@@ -47,6 +48,9 @@ jobs:
               - 'src/**/*'
               - 'pyproject.toml'
               - 'Dockerfile'
+            helm:
+              - '.github/**/*'
+              - 'helm/**/*'
            # unit-tests:
            #   - '.github/**/*'
            #   - 'src/**/*'
@@ -57,6 +61,11 @@ jobs:
     if: needs.changes.outputs.style == 'true'
     needs: changes
     uses: ./.github/workflows/style.yml
+
+  helm-style:
+    if: needs.changes.outputs.helm == 'true'
+    needs: changes
+    uses: ./.github/workflows/helm-style.yml
 
   security:
     if: needs.changes.outputs.security == 'true'
@@ -88,6 +97,7 @@ jobs:
     needs:
      - changes
      - style
+     - helm
      - security
      # - unit-tests
      # - coverage
