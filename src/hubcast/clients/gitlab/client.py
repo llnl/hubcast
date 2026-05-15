@@ -4,9 +4,11 @@ import urllib.parse
 import aiohttp
 import gidgetlab.aiohttp
 
+from hubcast.clients.gitlab.auth import (
+    GitLabAuthenticator,
+    GitLabSingleUserAuthenticator,
+)
 from hubcast.webhook import RoutingToken
-
-from .auth import GitLabAuthenticator, GitLabSingleUserAuthenticator
 
 log = logging.getLogger(__name__)
 
@@ -103,8 +105,6 @@ class GitLabClient:
             # temporary fix to support gitlab deployments in sub-paths
             gl.api_url = f"{self.instance_url}/api/v4/"
 
-            existing_hook = None
-
             repo_id = urllib.parse.quote_plus(gl_fullname)
             url = f"/projects/{repo_id}/hooks"
             try:
@@ -117,6 +117,8 @@ class GitLabClient:
                     )
                     return
                 raise
+
+            existing_hook = None
             for hook in hooks_data:
                 if hook["name"] == "hubcast":
                     existing_hook = hook
@@ -127,16 +129,9 @@ class GitLabClient:
                 await gl.post(url, data=new_hook)
                 return
 
-            # if an existing hook is found compare the values of it
-            # and the newly generated hook, update the hook to match
-            # the new configuration if they differ
-            changed = any(
-                existing_hook.get(key) != value for key, value in new_hook.items()
-            )
-
-            if changed:
-                url = f"/projects/{repo_id}/hooks/{existing_hook['id']}"
-                await gl.put(url, data=new_hook)
+            # otherwise update the existing hook with the new config
+            url = f"/projects/{repo_id}/hooks/{existing_hook['id']}"
+            await gl.put(url, data=new_hook)
 
     async def get_latest_pipeline(self, gl_fullname: str, ref: str) -> int:
         """gets the latest pipeline for an arbitrary GitLab repository and branch.
