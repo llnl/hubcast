@@ -63,9 +63,11 @@ class GitLabClient:
         self.webhook_secret = webhook_secret
         self.user = user
 
-    async def set_webhook(self, org: str, repo: str, webhook_data: WebhookData) -> None:
+    async def set_webhook(
+        self, dest_org: str, dest_repo: str, webhook_data: WebhookData
+    ) -> None:
         gl_token = await self.auth.authenticate_user(username=self.user)
-        gl_fullname = f"{org}/{repo}"
+        gl_fullname = f"{dest_org}/{dest_repo}"
 
         # Generate unique signed token for this webhook containing routing information
         token = webhook_data.encode(self.webhook_secret)
@@ -104,6 +106,7 @@ class GitLabClient:
                         extra={"user": self.user, "repo": gl_fullname},
                     )
                     return
+                raise
             for hook in hooks_data:
                 if hook["name"] == "hubcast":
                     existing_hook = hook
@@ -117,11 +120,9 @@ class GitLabClient:
             # if an existing hook is found compare the values of it
             # and the newly generated hook, update the hook to match
             # the new configuration if they differ
-            changed = False
-            for key in new_hook.keys():
-                if key != "token" and existing_hook[key] != new_hook[key]:
-                    changed = True
-                    break
+            changed = any(
+                existing_hook.get(key) != value for key, value in new_hook.items()
+            )
 
             if changed:
                 url = f"/projects/{repo_id}/hooks/{existing_hook['id']}"

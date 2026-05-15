@@ -8,9 +8,9 @@ from repligit.asyncio import fetch_pack, ls_remote, send_pack
 from hubcast.clients.github.client import GitHubClient
 from hubcast.clients.gitlab.client import GitLabClient
 from hubcast.exceptions import HubcastError
-from hubcast.webhooks import WebhookData
 from hubcast.web import comments
 from hubcast.web.github.utils import get_repo_config
+from hubcast.webhooks import WebhookData
 
 log = logging.getLogger(__name__)
 
@@ -78,9 +78,9 @@ async def sync_branch(
             gh_check=repo_config.check_name,
         )
         await gl.set_webhook(
-            repo_config.dest_org,
-            repo_config.dest_name,
-            webhook_data,
+            dest_org=repo_config.dest_org,
+            dest_repo=repo_config.dest_name,
+            webhook_data=webhook_data,
         )
 
     # sync commits from GitHub -> GitLab

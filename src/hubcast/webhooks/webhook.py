@@ -25,7 +25,6 @@ class WebhookData(BaseModel):
     gh_owner: str
     gh_repo: str
     gh_check: str
-    create_mr: bool = False
 
     def encode(self, secret: str) -> str:
         """Generate a cryptographically signed JWT token.
