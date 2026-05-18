@@ -75,9 +75,10 @@ async def pipeline_status_relay(
     pipeline_status = event.data["object_attributes"]["status"]
     pipeline_url = event.data["object_attributes"]["url"]
 
-    status = GITLAB_TO_GITHUB_STATUS[pipeline_status]
+    status = GITLAB_TO_GITHUB_STATUS.get(pipeline_status)
 
-    await gh.set_check_status(ref, gh_check_name, status, pipeline_url)
+    if status:
+        await gh.set_check_status(ref, gh_check_name, status, pipeline_url)
 
 
 @router.register("Job Hook")
@@ -96,6 +97,7 @@ async def job_status_relay(
     job_url = f"{repository_url}/-/jobs/{job_id}"
 
     name = f"{gh_check_name} / {job_name}" if gh_check_name else job_name
-    status = GITLAB_TO_GITHUB_STATUS[job_status]
+    status = GITLAB_TO_GITHUB_STATUS.get(job_status)
 
-    await gh.set_check_status(ref, name, status, job_url)
+    if status:
+        await gh.set_check_status(ref, name, status, job_url)
