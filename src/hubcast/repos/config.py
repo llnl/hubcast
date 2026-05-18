@@ -25,7 +25,7 @@ class RepoConfig(BaseModel):
 
     # Allow users to control the granularity of checks reported to GitHub
     # via setting either "pipeline" or "job"
-    status_type: Literal["pipeline", "job"] = "pipeline"
+    check_type: Literal["pipeline", "job"] = "pipeline"
 
     # TODO: create GitLab MRs that mirror GitHub PRs to allow users to test
     # synthetic merge commits between the branch and the default branch
