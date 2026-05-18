@@ -63,14 +63,7 @@ class GitLabRouter(routing.Router):
 router = GitLabRouter()
 
 
-@router.register("Pipeline Hook", status="created")
-@router.register("Pipeline Hook", status="pending")
-@router.register("Pipeline Hook", status="manual")
-@router.register("Pipeline Hook", status="running")
-@router.register("Pipeline Hook", status="failed")
-@router.register("Pipeline Hook", status="canceled")
-@router.register("Pipeline Hook", status="skipped")
-@router.register("Pipeline Hook", status="success")
+@router.register("Pipeline Hook")
 async def pipeline_status_relay(
     event: sansio.Event, gh: GitHubClient, gh_check_name: str, *arg, **kwargs
 ) -> None:
@@ -87,14 +80,7 @@ async def pipeline_status_relay(
     await gh.set_check_status(ref, gh_check_name, status, pipeline_url)
 
 
-@router.register("Job Hook", status="created")
-@router.register("Job Hook", status="pending")
-@router.register("Job Hook", status="manual")
-@router.register("Job Hook", status="running")
-@router.register("Job Hook", status="failed")
-@router.register("Job Hook", status="canceled")
-@router.register("Job Hook", status="skipped")
-@router.register("Job Hook", status="success")
+@router.register("Job Hook")
 async def job_status_relay(
     event: sansio.Event, gh: GitHubClient, gh_check_name: str, *arg, **kwargs
 ) -> None:
@@ -106,10 +92,10 @@ async def job_status_relay(
     job_name = event.data["build_name"]
     job_status = event.data["build_status"]
 
-    repository_url = event.data["repository"]["url"]
+    repository_url = event.data["project"]["web_url"]
     job_url = f"{repository_url}/-/jobs/{job_id}"
 
-    name = f"{gh_check_name}: {job_name}" if gh_check_name else job_name
+    name = f"{gh_check_name} / {job_name}" if gh_check_name else job_name
     status = GITLAB_TO_GITHUB_STATUS[job_status]
 
     await gh.set_check_status(ref, name, status, job_url)
