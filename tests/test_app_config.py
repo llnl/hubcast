@@ -9,9 +9,7 @@ def test_load_config_missing_required():
     """Should raise ConfigError if required environment variables are missing."""
 
     # Clear any existing config env vars
-    env_vars_to_clear = [
-        key for key in os.environ if key.startswith("HC_")
-    ]
+    env_vars_to_clear = [key for key in os.environ if key.startswith("HC_")]
     original_values = {}
     for key in env_vars_to_clear:
         original_values[key] = os.environ.pop(key)
@@ -19,6 +17,7 @@ def test_load_config_missing_required():
     try:
         with pytest.raises(ConfigError, match="Configuration validation failed"):
             from hubcast.config import load_config
+
             load_config()
     finally:
         # Restore original values

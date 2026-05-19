@@ -32,7 +32,9 @@ def clear_config_cache():
 def test_create_config_minimal():
     """Should create RepoConfig with minimal settings."""
 
-    config = RepoConfig.model_validate({"Repo": {"dest_org": "owner", "dest_name": "repo"}})
+    config = RepoConfig.model_validate(
+        {"Repo": {"dest_org": "owner", "dest_name": "repo"}}
+    )
 
     assert config.dest_org == "owner"
     assert config.dest_name == "repo"
