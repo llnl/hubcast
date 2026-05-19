@@ -148,7 +148,7 @@ class GitLabClient:
             gh_owner=gh_owner,
             gh_repo=gh_repo,
             gh_check=gh_check,
-            create_mr=self.create_mr,
+            create_mr=create_mr,
         )
         token = routing_token.encode(self.webhook_secret)
 
