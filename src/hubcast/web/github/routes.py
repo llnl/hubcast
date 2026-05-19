@@ -208,6 +208,8 @@ async def sync_pr(
     else:
         sync_ref = f"refs/heads/{pull_request['head']['ref']}"
 
+    mr_src_branch = sync_ref.removeprefix("refs/heads/")
+
     if is_pull_request_fork and src_repo_private:
         # GitHub apps will not have access to private forks
         log.warning(
@@ -286,11 +288,11 @@ async def sync_pr(
 
     # skip already created MRs
     if repo_config.create_mr and not await gl.get_mr(
-        dest_fullname, sync_ref.removeprefix("refs/heads/"), default_branch
+        dest_fullname, mr_src_branch, default_branch
     ):
         await gl.create_mr(
             gl_fullname=dest_fullname,
-            src_branch=sync_ref.removeprefix("refs/heads/"),
+            src_branch=mr_src_branch,
             target_branch=default_branch,
             ref_id=pull_request_id,
             ref_url=pull_request["html_url"],
@@ -400,7 +402,13 @@ async def respond_pr_comment(
         src_repo_private = pull_request["head"]["repo"]["private"]
         # sync the approved commit explicitly
         await sync_pr(
-            pull_request, gh, gl, gl_user, src_repo_private, want_sha=commit_sha
+            pull_request,
+            gh,
+            gl,
+            gl_user,
+            src_repo_private,
+            want_sha=commit_sha,
+            default_branch=event.data["repository"]["default_branch"],
         )
         await gh.react_to_comment(event.data["review"]["node_id"], "+1")
 
