@@ -52,15 +52,15 @@ async def sync_branch(
     src_owner, src_repo_name = src_fullname.split("/")
     # the commit the push event is referencing
     want_sha = event.data["after"]
-    target_ref = event.data["ref"]
+    sync_ref = event.data["ref"]
 
     # skip branches from push events that are also pull requests
-    if await gh.get_prs(branch=target_ref):
+    if await gh.get_prs(branch=sync_ref):
         return
 
     # only refresh config on default branch pushes (where .github/hubcast.yml lives)
     default_branch = event.data["repository"]["default_branch"]
-    is_default_branch = target_ref == f"refs/heads/{default_branch}"
+    is_default_branch = sync_ref == f"refs/heads/{default_branch}"
     repo_config, fetched = await get_repo_config(
         gh, src_fullname, refresh=is_default_branch
     )
@@ -86,19 +86,19 @@ async def sync_branch(
 
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     have_shas = set(gl_refs.values())
-    from_sha = gl_refs.get(target_ref) or ("0" * 40)
+    from_sha = gl_refs.get(sync_ref) or ("0" * 40)
 
     if want_sha in have_shas:
         log.info(
-            "Target ref already up-to-date",
-            extra={"target_ref": target_ref},
+            "Destination ref already up-to-date",
+            extra={"ref": sync_ref},
         )
         return
 
     log.info(
         "Mirroring refs",
         extra={
-            "ref": target_ref,
+            "ref": sync_ref,
             "from_sha": from_sha,
             "want_sha": want_sha,
         },
@@ -116,7 +116,7 @@ async def sync_branch(
 
     await send_pack(
         dest_remote_url,
-        target_ref,
+        sync_ref,
         from_sha,
         want_sha,
         packfile,
@@ -127,7 +127,7 @@ async def sync_branch(
     log.info(
         "Successfully mirrored refs",
         extra={
-            "ref": target_ref,
+            "ref": sync_ref,
             "from_sha": from_sha,
             "want_sha": want_sha,
         },
@@ -144,7 +144,7 @@ async def remove_branch(
     **kwargs,
 ) -> None:
     src_fullname = event.data["repository"]["full_name"]
-    target_ref = event.data["ref"]
+    sync_ref = event.data["ref"]
 
     repo_config, _ = await get_repo_config(gh, src_fullname)
 
@@ -154,14 +154,14 @@ async def remove_branch(
     gl_token = await gl.auth.authenticate_user(gl_user)
 
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
-    head_sha = gl_refs.get(target_ref)
+    head_sha = gl_refs.get(sync_ref)
     null_sha = "0" * 40
 
-    log.info("Deleting ref", extra={"target_ref": target_ref})
+    log.info("Deleting ref", extra={"ref": sync_ref})
 
     await send_pack(
         dest_remote_url,
-        target_ref,
+        sync_ref,
         head_sha,
         null_sha,
         b"",
@@ -171,7 +171,7 @@ async def remove_branch(
 
     log.info(
         "Successfully deleted ref",
-        extra={"target_ref": target_ref},
+        extra={"ref": sync_ref},
     )
 
 
@@ -204,9 +204,9 @@ async def sync_pr(
     # between multiple repositories
     is_pull_request_fork = src_fullname != base_fullname
     if is_pull_request_fork:
-        target_ref = f"refs/heads/pr-{pull_request_id}"
+        sync_ref = f"refs/heads/pr-{pull_request_id}"
     else:
-        target_ref = f"refs/heads/{pull_request['head']['ref']}"
+        sync_ref = f"refs/heads/{pull_request['head']['ref']}"
 
     if is_pull_request_fork and src_repo_private:
         # GitHub apps will not have access to private forks
@@ -237,12 +237,12 @@ async def sync_pr(
 
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     have_shas = set(gl_refs.values())
-    from_sha = gl_refs.get(target_ref) or ("0" * 40)
+    from_sha = gl_refs.get(sync_ref) or ("0" * 40)
 
     if want_sha in have_shas:
         log.info(
-            "Target ref already up-to-date",
-            extra={"target_ref": target_ref},
+            "Destination ref already up-to-date",
+            extra={"ref": sync_ref},
         )
         return
 
@@ -250,7 +250,7 @@ async def sync_pr(
         # no auth needed for public forks
         src_creds = {}
     else:
-        # authenticate if the PR comes from the target repository
+        # authenticate if the PR comes from the src repository
         src_creds = {
             "username": gh.requester,  # the username doesn't matter, but can't be empty
             "password": await gh.auth.authenticate_installation(
@@ -276,7 +276,7 @@ async def sync_pr(
     )
     await send_pack(
         dest_remote_url,
-        target_ref,
+        sync_ref,
         from_sha,
         want_sha,
         packfile,
@@ -284,14 +284,13 @@ async def sync_pr(
         password=gl_token,
     )
 
+    # skip already created MRs
     if repo_config.create_mr and not await gl.get_mr(
-        dest_fullname, target_ref.removeprefix("refs/heads/"), default_branch
-    ):  # skip already created MRs
-        # TODO we still want to create an MR even if the target ref is up to date
+        dest_fullname, sync_ref.removeprefix("refs/heads/"), default_branch
+    ):
         await gl.create_mr(
             gl_fullname=dest_fullname,
-            # TODO the `target_branch` wording here is a bit odd as we usually refer to it as the destination branch we sync to, but for GL MRs it refers to the base for the MR
-            src_branch=target_ref.removeprefix("refs/heads/"),
+            src_branch=sync_ref.removeprefix("refs/heads/"),
             target_branch=default_branch,
             ref_id=pull_request_id,
             ref_url=pull_request["html_url"],
@@ -358,20 +357,20 @@ async def remove_pr(
         return
 
     pull_request_id = pull_request["number"]
-    target_ref = f"refs/heads/pr-{pull_request_id}"
+    sync_ref = f"refs/heads/pr-{pull_request_id}"
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
     gl_token = await gl.auth.authenticate_user(gl_user)
 
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
-    head_sha = gl_refs.get(target_ref)
+    head_sha = gl_refs.get(sync_ref)
     null_sha = "0" * 40
 
-    log.info("Deleting ref", extra={"target_ref": target_ref})
+    log.info("Deleting ref", extra={"ref": sync_ref})
     await send_pack(
         dest_remote_url,
-        target_ref,
+        sync_ref,
         head_sha,
         null_sha,
         b"",
