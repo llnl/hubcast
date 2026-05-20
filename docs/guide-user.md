@@ -11,7 +11,7 @@ mkdir hubcast-test && cd hubcast-test
 git init .
 ```
 
-If you haven't already, create a repository on the destination forge (like GitLab.com). 
+If you haven't already, create a repository on the destination forge (like GitLab.com).
 
 For Hubcast to function properly, the state of both source and destination repos need to be identical before any syncing can occur.
 
@@ -23,25 +23,25 @@ Behavior specific to each repository can be configured via the `hubcast.yml` fil
 Repo:
   # Required: organization or user that owns the repo on the destination forge
   dest_org: example
-  
+
   # Required: name of the destination repository
   dest_name: hubcast-test
-  
+
   # Optional: name of the CI check as reported back to GitHub (default: gitlab-ci)
   check_name: gitlab-ci
-  
-  # Optional: granularity of CI statuses reported to GitHub (default: ["pipeline"])
-  # Set to ["pipeline"] for overall pipeline status only
-  # Set to ["jobs"] for individual job statuses only
-  # Set to ["pipeline", "jobs"] to report both
-  check_types: ["pipeline"]
-  
+
+  # Optional: granularity of CI statuses reported to GitHub (default: [pipeline])
+  # Set to [pipeline] for overall pipeline status only
+  # Set to [jobs] for individual job statuses only
+  # Set to [pipeline, jobs] to report both
+  check_types: [pipeline]
+
   # Optional: delete branches from destination when source PR is closed (default: true)
   delete_closed: true
-  
+
   # Optional: sync draft PRs/MRs (default: true)
   sync_drafts: true
-  
+
   # Optional: post message when draft sync is disabled (default: true)
   sync_drafts_msg: true
 ```
@@ -79,8 +79,8 @@ git push gh main && git push gl main
 Now that the source and destination repos are properly configured, we can install Hubcast into the source repository.
 
 ### GitHub as a source forge
-The administrator of your Hubcast instance created a [GitHub App](https://docs.github.com/en/apps/using-github-apps/installing-your-own-github-app). 
-Inquire with them about the availability of the app and whether it belongs to an organization or user account. 
+The administrator of your Hubcast instance created a [GitHub App](https://docs.github.com/en/apps/using-github-apps/installing-your-own-github-app).
+Inquire with them about the availability of the app and whether it belongs to an organization or user account.
 See the [admin guide](/docs/guide-admin.md#github-as-a-source-forge) for more details.
 
 The app can be installed by a maintainer of the source repository.
