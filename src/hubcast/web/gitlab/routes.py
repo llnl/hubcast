@@ -28,6 +28,10 @@ class GitLabRouter(routing.Router):
     Custom router to better handle logging of errors
     """
 
+    def register(self, event_type: str, **data_detail: Any):  # type: ignore[override]
+        """Register a callback. Relaxes return type to allow dict returns for testing."""
+        return super().register(event_type, **data_detail)
+
     async def dispatch(self, event: sansio.Event, *args: Any, **kwargs: Any) -> None:
         try:
             await super().dispatch(event, *args, **kwargs)
@@ -57,7 +61,7 @@ async def pipeline_status_relay(
     check_types: list,
     *args,
     **kwargs,
-) -> None:
+) -> str:
     """Relay status of a GitLab pipeline back to GitHub."""
 
     pipeline_status = event.data["object_attributes"]["status"]

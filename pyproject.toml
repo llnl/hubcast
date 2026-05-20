@@ -63,7 +63,7 @@ exclude = ["spack/**"]
 
 # python-ldap is a C extension without type stubs
 [[tool.ty.overrides]]
-include = ["src/hubcast/account_map/ldap.py"]
+include = ["src/hubcast/account_map/ldap.py", "tests/test_account_map.py"]
 rules = { unresolved-attribute = "ignore" }
 
 [tool.bandit]

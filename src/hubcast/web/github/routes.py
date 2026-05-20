@@ -19,6 +19,10 @@ class GitHubRouter(routing.Router):
     Custom router to handle GitHub interactions for hubcast
     """
 
+    def register(self, event_type: str, **data_detail: Any):  # type: ignore[override]
+        """Register a callback. Relaxes return type to allow dict returns for testing."""
+        return super().register(event_type, **data_detail)
+
     async def dispatch(self, event: sansio.Event, *args: Any, **kwargs: Any) -> None:
         """Dispatch an event to all registered function(s)."""
         found_callbacks = self.fetch(event)
@@ -45,7 +49,7 @@ async def sync_branch(
     gl_user: str,
     *arg,
     **kwargs,
-) -> None:
+) -> dict[str, str]:
     """Sync the git branch referenced to GitLab."""
     src_repo_url = event.data["repository"]["clone_url"]
     src_fullname = event.data["repository"]["full_name"]
@@ -143,7 +147,7 @@ async def remove_branch(
     gl_user: str,
     *arg,
     **kwargs,
-) -> None:
+) -> dict[str, str]:
     src_fullname = event.data["repository"]["full_name"]
     sync_ref = event.data["ref"]
 
@@ -195,7 +199,7 @@ async def sync_pr(
     src_repo_private: bool,
     want_sha: str,
     default_branch: str,
-) -> None:
+) -> dict[str, str]:
     """Sync the git fork/branch referenced in a PR to GitLab.
 
     This isn't technically an event handler, but is used a couple different ways in this file.
@@ -320,7 +324,7 @@ async def sync_pr_event(
     gl_user: str,
     *arg,
     **kwargs,
-) -> None:
+) -> dict[str, str]:
     """Sync the git fork/branch referenced in a PR to GitLab."""
     pull_request = event.data["pull_request"]
     src_repo_private = pull_request["head"]["repo"]["private"]
@@ -349,7 +353,7 @@ async def remove_pr(
     gl_user: str,
     *arg,
     **kwargs,
-) -> None:
+) -> dict[str, str]:
     pull_request = event.data["pull_request"]
     src_fullname = pull_request["head"]["repo"]["full_name"]
     base_fullname = pull_request["base"]["repo"]["full_name"]
@@ -405,7 +409,7 @@ async def respond_pr_comment(
     gl_user: str,
     *arg,
     **kwargs,
-) -> None:
+) -> dict[str, str]:
     comment = event.data["review"]["body"]
 
     # reviews without comments (plain approvals or RFC)
@@ -434,6 +438,8 @@ async def respond_pr_comment(
 
         return {"action": "approve_sent"}
 
+    return {"action": "skipped", "reason": "no_command_matched"}
+
 
 @router.register("issue_comment", action="created")
 async def respond_comment(
@@ -443,7 +449,7 @@ async def respond_comment(
     gl_user: str,
     *arg,
     **kwargs,
-) -> None:
+) -> dict[str, str]:
     # differentiate issue vs PR comment
     if "pull_request" not in event.data["issue"]:
         return {"action": "skipped", "reason": "not_pr_comment"}
@@ -451,7 +457,7 @@ async def respond_comment(
     comment = event.data["comment"]["body"]
     response = None
     plus_one = False
-    return_val = None
+    return_val = {"action": "skipped", "reason": "no_command_matched"}
 
     if re.search(f"{gh.bot_caller} help", comment, re.IGNORECASE):
         response = comments.help_message(gh.bot_caller)
@@ -560,7 +566,7 @@ async def rerun_check(
     gl_user: str,
     *arg,
     **kwargs,
-) -> None:
+) -> dict[str, str]:
     """
     Handles a user re-running a check run for the latest commit in the branch.
     See https://docs.github.com/en/webhooks/webhook-events-and-payloads?actionType=rerequested#check_run.

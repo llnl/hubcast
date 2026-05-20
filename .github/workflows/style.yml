@@ -26,7 +26,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install -r .github/workflows/requirements/style.txt
-          pip install -e .[ldap]
+          pip install -e .[ldap,dev]
 
       - name: Run Ruff
         run: |

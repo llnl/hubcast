@@ -585,7 +585,7 @@ async def test_respond_comment_restart_jobs(
 async def test_respond_comment_ignores_unmatched_commands(
     mock_comment_event, mock_gh, mock_gl, mock_repligit_ops
 ):
-    """Should return None when comment doesn't match any command."""
+    """Should return skipped when comment doesn't match any command."""
 
     mock_comment_event.data["comment"]["body"] = "hi"
 
@@ -593,7 +593,8 @@ async def test_respond_comment_ignores_unmatched_commands(
         event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result is None
+    assert result["action"] == "skipped"
+    assert result["reason"] == "no_command_matched"
 
 
 # Tests for rerun_check
