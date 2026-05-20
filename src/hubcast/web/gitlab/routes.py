@@ -96,12 +96,9 @@ async def pipeline_status_relay(
         ref = await gl.get_branch_head(gl_fullname, source_branch)
 
     # modify check name based on the pipeline source
-    check_name = gh_check_name
     if create_mr:
-        if is_mr_event:
-            check_name = f"{gh_check_name} [merge request]"
-        else:
-            check_name = f"{gh_check_name} [branch]"
+        suffix = "merge request" if is_mr_event else "branch"
+    name = f"{gh_check_name} [{suffix}]" if suffix else gh_check_name
 
     # get status from event
     pipeline_status = event.data["object_attributes"]["status"]
@@ -111,7 +108,7 @@ async def pipeline_status_relay(
 
     if status:
         await gh.set_check_status(
-            ref, check_name,
+            ref, name,
             status,
             title="External pipeline run",
             summary=f"[View this pipeline on {urlparse(pipeline_url).netloc}]({pipeline_url})",
@@ -121,7 +118,12 @@ async def pipeline_status_relay(
 
 @router.register("Job Hook")
 async def job_status_relay(
-    event: sansio.Event, gh: GitHubClient, gh_check_name: str, *arg, **kwargs
+    event: sansio.Event,
+    gh: GitHubClient,
+    gl: GitLabClient,
+    gh_check_name: str,
+    *arg,
+    **kwargs,
 ) -> None:
     """Relay status of a GitLab job back to GitHub."""
     # get ref from event

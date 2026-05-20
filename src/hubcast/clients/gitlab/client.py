@@ -93,7 +93,7 @@ class GitLabClient:
         gl_fullname: str,
         src_branch: str,
         target_branch: str,
-        ref_id: int,
+        ref_title: int,
         ref_url: str,
     ):
         """Create a merge request in GitLab.
@@ -102,7 +102,7 @@ class GitLabClient:
             gl_fullname: GitLab project name
             src_branch: Source branch for the MR
             target_branch: Target (base) branch for the MR
-            ref_id: GitHub PR number to reference in the MR title
+            ref_title: GitHub PR title
             ref_url: GitHub PR URL to include in the MR description
         """
         gl_token = await self.auth.authenticate_user(username=self.user)
@@ -125,7 +125,7 @@ class GitLabClient:
                 data={
                     "source_branch": src_branch,
                     "target_branch": target_branch,
-                    "title": f"PR from source: #{ref_id}",
+                    "title": ref_title,
                     "description": ref_url,
                 },
             )

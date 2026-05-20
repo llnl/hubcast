@@ -57,7 +57,6 @@ class GitLabHandler:
 
             gl_user = event.data["user"]["username"]
             gitlab_client = self.gitlab_client_factory.create_client(gl_user)
-
             await spawn(
                 request,
                 router.dispatch(

@@ -294,7 +294,7 @@ async def sync_pr(
             gl_fullname=dest_fullname,
             src_branch=mr_src_branch,
             target_branch=default_branch,
-            ref_id=pull_request_id,
+            ref_title=pull_request["title"],
             ref_url=pull_request["html_url"],
         )
 
