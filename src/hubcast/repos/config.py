@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -23,9 +23,9 @@ class RepoConfig(BaseModel):
     sync_drafts: bool = True
     sync_drafts_msg: bool = True
 
-    # TODO: allow users to control the granularity of checks reported to GitHub
-    # via setting either "pipeline" or "job"
-    check_type: str = "pipeline"
+    # Allow users to control the granularity of checks reported to GitHub
+    # via setting one or more of "pipeline" and/or "jobs"
+    check_types: list[Literal["pipeline", "jobs"]] = ["pipeline"]
 
     # TODO: create GitLab MRs that mirror GitHub PRs to allow users to test
     # synthetic merge commits between the branch and the default branch
