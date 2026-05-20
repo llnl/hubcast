@@ -77,7 +77,7 @@ async def sync_branch(
             gh_owner=src_owner,
             gh_repo=src_repo_name,
             gh_check=repo_config.check_name,
-            check_type=repo_config.check_type,
+            check_types=repo_config.check_types,
         )
 
     # sync commits from GitHub -> GitLab
