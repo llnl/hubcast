@@ -56,7 +56,7 @@ class GitHubClient:
         ref: str,
         check_name: str,
         status: str,
-        details_url: str | None = None,
+        run_details: dict[str, str] | None = None,
         message: str | None = None,
     ) -> None:
         """
@@ -70,11 +70,11 @@ class GitHubClient:
             The name of the check.
         status: str
             The status of the check.
-        details_url: str, optional
-            A URL with more details about the check. Required if message is not provided.
+        run_details: dict, optional
+            Dict with "url" and "type" keys for external check details.
         message: str, optional
             Used to convey a small message in the check output
-            (for example, to indicate a skipped sync, rather than forwarding pipeline status).
+            (for example, to indicate a skipped sync, rather than forwarding check status).
 
         """
         # construct upload payload
@@ -88,12 +88,14 @@ class GitHubClient:
                 "title": message,
                 "summary": "",  # summary can't be None
             }
-        else:
+        elif run_details:
+            details_url = run_details["url"]
+            check_type = run_details["type"]
             gitlab_netloc = urlparse(details_url).netloc
             payload["details_url"] = details_url
             payload["output"] = {
-                "title": "External Pipeline Run",
-                "summary": f"[View this pipeline on {gitlab_netloc}]({details_url})",
+                "title": f"External {check_type} run",
+                "summary": f"[View this {check_type} on {gitlab_netloc}]({details_url})",
             }
 
         # for success and failure status write out a conclusion

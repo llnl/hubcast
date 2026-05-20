@@ -78,7 +78,12 @@ async def pipeline_status_relay(
     status = GITLAB_TO_GITHUB_STATUS.get(pipeline_status)
 
     if status:
-        await gh.set_check_status(ref, gh_check_name, status, pipeline_url)
+        await gh.set_check_status(
+            ref,
+            gh_check_name,
+            status,
+            run_details={"url": pipeline_url, "type": "pipeline"},
+        )
 
 
 @router.register("Job Hook")
@@ -100,4 +105,6 @@ async def job_status_relay(
     status = GITLAB_TO_GITHUB_STATUS.get(job_status)
 
     if status:
-        await gh.set_check_status(ref, name, status, job_url)
+        await gh.set_check_status(
+            ref, name, status, run_details={"url": job_url, "type": "job"}
+        )
