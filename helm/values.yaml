@@ -8,7 +8,7 @@ image:
   repository: ghcr.io/llnl/hubcast
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  tag: latest
   # Digest takes precedence over tag for immutable deployments (recommended for production)
   # Example: sha256:abcdef123456...
   digest: ""
