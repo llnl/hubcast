@@ -241,50 +241,49 @@ async def sync_pr(
     have_shas = set(gl_refs.values())
     from_sha = gl_refs.get(sync_ref) or ("0" * 40)
 
-    if want_sha in have_shas:
+    if want_sha not in have_shas:  # needs sync
+        if is_pull_request_fork and not src_repo_private:
+            # no auth needed for public forks
+            src_creds = {}
+        else:
+            # authenticate if the PR comes from the src repository
+            src_creds = {
+                "username": gh.requester,  # the username doesn't matter, but can't be empty
+                "password": await gh.auth.authenticate_installation(
+                    gh.repo_owner, gh.repo_name
+                ),
+            }
+
+        # fetch differential packfile with all new commits
+        packfile = await fetch_pack(
+            src_repo_url,
+            want_sha,
+            have_shas,
+            **src_creds,
+        )
+
+        # upload packfile to gitlab repository
+        log.info(
+            "Mirroring refs",
+            extra={
+                "from_sha": from_sha,
+                "want_sha": want_sha,
+            },
+        )
+        await send_pack(
+            dest_remote_url,
+            sync_ref,
+            from_sha,
+            want_sha,
+            packfile,
+            username=gl_user,
+            password=gl_token,
+        )
+    else:
         log.info(
             "Destination ref already up-to-date",
             extra={"ref": sync_ref},
         )
-        return
-
-    if is_pull_request_fork and not src_repo_private:
-        # no auth needed for public forks
-        src_creds = {}
-    else:
-        # authenticate if the PR comes from the src repository
-        src_creds = {
-            "username": gh.requester,  # the username doesn't matter, but can't be empty
-            "password": await gh.auth.authenticate_installation(
-                gh.repo_owner, gh.repo_name
-            ),
-        }
-
-    # fetch differential packfile with all new commits
-    packfile = await fetch_pack(
-        src_repo_url,
-        want_sha,
-        have_shas,
-        **src_creds,
-    )
-
-    # upload packfile to gitlab repository
-    log.info(
-        "Mirroring refs",
-        extra={
-            "from_sha": from_sha,
-            "want_sha": want_sha,
-        },
-    )
-    await send_pack(
-        dest_remote_url,
-        sync_ref,
-        from_sha,
-        want_sha,
-        packfile,
-        username=gl_user,
-        password=gl_token,
-    )
 
     # skip already created MRs
     if repo_config.create_mr and not await gl.get_mr(
