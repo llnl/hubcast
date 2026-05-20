@@ -17,20 +17,36 @@ For Hubcast to function properly, the state of both source and destination repos
 
 ## Configuration
 
-Behavior specific to each repository can be configured via the `hubcast.yml` file.
+Behavior specific to each repository can be configured via the `hubcast.yml` file. Create this file at `.github/hubcast.yml` in your repository:
 
-The following options are available:
+```yaml
+Repo:
+  # Required: organization or user that owns the repo on the destination forge
+  dest_org: example
+  
+  # Required: name of the destination repository
+  dest_name: hubcast-test
+  
+  # Optional: name of the CI check as reported back to GitHub (default: gitlab-ci)
+  check_name: gitlab-ci
+  
+  # Optional: granularity of CI statuses reported to GitHub (default: ["pipeline"])
+  # Set to ["pipeline"] for overall pipeline status only
+  # Set to ["jobs"] for individual job statuses only
+  # Set to ["pipeline", "jobs"] to report both
+  check_types: ["pipeline"]
+  
+  # Optional: delete branches from destination when source PR is closed (default: true)
+  delete_closed: true
+  
+  # Optional: sync draft PRs/MRs (default: true)
+  sync_drafts: true
+  
+  # Optional: post message when draft sync is disabled (default: true)
+  sync_drafts_msg: true
+```
 
-- `dest_org`: the organization or user that owns the repo on the destination forge
-- `dest_name`: the name of the destination repository
-- `check_name`: the name of the CI check as reported back to GitHub. default: `gitlab-ci`
-- `delete_closed`: if enabled, Hubcast will delete branches from the destination forge when the corresponding source PR is closed. default: True
-- `sync_drafts`: if enabled, Hubcast will sync draft PRs/MRs. default: True
-- `sync_drafts_msg`: if enabled and `sync_drafts=False`, Hubcast will post a message to the source repo explaining why the change was not synced. default: True
-
-For example, if you'd like to sync your repo to `https://gitlab.com/example/hubcast-test`, `owner` would be `example` and `name` would be `hubcast-test`.
-
-To proceed with the default settings for your repo, copy the following contents into `.github/hubcast.yml`:
+A minimal configuration requires only `dest_org` and `dest_name`:
 
 ```yaml
 Repo:
