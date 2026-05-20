@@ -1,5 +1,6 @@
 import logging
 import urllib.parse
+from typing import Literal
 
 import aiohttp
 import gidgetlab.aiohttp
@@ -72,7 +73,7 @@ class GitLabClient:
         gh_owner: str,
         gh_repo: str,
         gh_check: str,
-        check_types: list[str],
+        check_types: list[Literal["pipeline", "jobs"]],
     ) -> None:
         gl_token = await self.auth.authenticate_user(username=self.user)
         gl_fullname = f"{dest_org}/{dest_repo}"
