@@ -59,17 +59,17 @@ async def test_handle_valid_webhook(handler, mock_request):
     """Should return 200 for a normal webhook."""
 
     with (
-        patch("hubcast.web.gitlab.handler.validate_routing_token") as mock_validate,
+        patch("hubcast.web.gitlab.handler.RoutingToken.decode") as mock_decode,
         patch("hubcast.web.gitlab.handler.sansio.Event.from_http") as mock_event,
         patch("hubcast.web.gitlab.handler.spawn", side_effect=fake_spawn),
         patch("hubcast.web.gitlab.handler.router.dispatch", new_callable=AsyncMock),
     ):
         # Mock routing token validation
-        mock_validate.return_value = {
-            "gh_owner": "owner",
-            "gh_repo": "repo",
-            "gh_check": "gitlab-ci",
-        }
+        mock_routing_token = Mock()
+        mock_routing_token.gh_owner = "owner"
+        mock_routing_token.gh_repo = "repo"
+        mock_routing_token.gh_check = "gitlab-ci"
+        mock_decode.return_value = mock_routing_token
 
         mock_event.return_value = Mock(
             event="Pipeline Hook",
@@ -91,15 +91,15 @@ async def test_handle_exception(handler, mock_request):
     """Should return 500 if an exception occurs."""
 
     with (
-        patch("hubcast.web.gitlab.handler.validate_routing_token") as mock_validate,
+        patch("hubcast.web.gitlab.handler.RoutingToken.decode") as mock_decode,
         patch("hubcast.web.gitlab.handler.sansio.Event.from_http") as mock_event,
     ):
         # Mock routing token validation
-        mock_validate.return_value = {
-            "gh_owner": "owner",
-            "gh_repo": "repo",
-            "gh_check": "gitlab-ci",
-        }
+        mock_routing_token = Mock()
+        mock_routing_token.gh_owner = "owner"
+        mock_routing_token.gh_repo = "repo"
+        mock_routing_token.gh_check = "gitlab-ci"
+        mock_decode.return_value = mock_routing_token
 
         mock_event.side_effect = Exception("bug")
         response = await handler.handle(mock_request)
@@ -110,16 +110,16 @@ async def test_handle_exception(handler, mock_request):
 async def test_handle_validation_failure(handler, mock_request):
     """Should return 401 for an invalid routing token."""
 
-    from hubcast.web.utils import RoutingTokenError
+    from hubcast.webhook import RoutingTokenError
 
     mock_request.headers = {
         "x-gitlab-event": "Pipeline Hook",
         "x-gitlab-token": "invalid-token",
     }
 
-    with patch("hubcast.web.gitlab.handler.validate_routing_token") as mock_validate:
+    with patch("hubcast.web.gitlab.handler.RoutingToken.decode") as mock_decode:
         # Simulate token validation failure
-        mock_validate.side_effect = RoutingTokenError("Invalid token signature")
+        mock_decode.side_effect = RoutingTokenError("Invalid token signature")
         response = await handler.handle(mock_request)
 
     assert response.status == 401
@@ -130,17 +130,17 @@ async def test_handle_query_params(handler, mock_request):
     """Should extract GitHub repo info from routing token."""
 
     with (
-        patch("hubcast.web.gitlab.handler.validate_routing_token") as mock_validate,
+        patch("hubcast.web.gitlab.handler.RoutingToken.decode") as mock_decode,
         patch("hubcast.web.gitlab.handler.sansio.Event.from_http") as mock_event,
         patch("hubcast.web.gitlab.handler.spawn", side_effect=fake_spawn),
         patch("hubcast.web.gitlab.handler.router.dispatch", new_callable=AsyncMock),
     ):
         # Mock routing token validation with specific owner/repo
-        mock_validate.return_value = {
-            "gh_owner": "owner",
-            "gh_repo": "repo",
-            "gh_check": "gitlab-ci",
-        }
+        mock_routing_token = Mock()
+        mock_routing_token.gh_owner = "owner"
+        mock_routing_token.gh_repo = "repo"
+        mock_routing_token.gh_check = "gitlab-ci"
+        mock_decode.return_value = mock_routing_token
 
         # just a basic event
         mock_event.return_value = Mock(
