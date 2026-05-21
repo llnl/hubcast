@@ -1,5 +1,6 @@
 import logging
 from typing import Any
+from urllib.parse import urlparse
 
 from gidgetlab import routing, sansio
 
@@ -82,7 +83,9 @@ async def pipeline_status_relay(
             ref,
             gh_check_name,
             status,
-            run_details={"url": pipeline_url, "type": "pipeline"},
+            title="External pipeline run",
+            summary=f"[View this pipeline on {urlparse(pipeline_url).netloc}]({pipeline_url})",
+            details_url=pipeline_url,
         )
 
 
@@ -106,5 +109,10 @@ async def job_status_relay(
 
     if status:
         await gh.set_check_status(
-            ref, name, status, run_details={"url": job_url, "type": "job"}
+            ref,
+            name,
+            status,
+            title="External job run",
+            summary=f"[View this job on {urlparse(job_url).netloc}]({job_url})",
+            details_url=job_url,
         )
