@@ -281,8 +281,8 @@ class GitLabClient:
 
             return pipeline.get("web_url")
 
-    async def get_branch_head(self, gl_fullname: str, branch_name: str) -> str:
-        """Get the HEAD commit SHA of a branch."""
+    async def get_commit(self, gl_fullname: str, sha: str) -> dict:
+        """Get details for a commit SHA in a project"""
         gl_token = await self.auth.authenticate_user(self.user)
 
         async with aiohttp.ClientSession() as session:
@@ -298,8 +298,4 @@ class GitLabClient:
 
             repo_id = urllib.parse.quote_plus(gl_fullname)
 
-            branch_data = await gl.getitem(
-                f"/projects/{repo_id}/repository/branches/{branch_name}"
-            )
-
-            return branch_data["commit"]["id"]
+            return await gl.getitem(f"/projects/{repo_id}/repository/commits/{sha}")
