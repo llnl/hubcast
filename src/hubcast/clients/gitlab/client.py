@@ -202,6 +202,26 @@ class GitLabClient:
             url = f"/projects/{repo_id}/hooks/{existing_hook['id']}"
             await gl.put(url, data=new_hook)
 
+    async def get_pipeline(self, gl_fullname: str, pipeline_id: int) -> dict:
+        """Gets a pipeline object for a GitLab project."""
+
+        gl_token = await self.auth.authenticate_user(self.user)
+
+        async with aiohttp.ClientSession() as session:
+            gl = gidgetlab.aiohttp.GitLabAPI(
+                session,
+                requester=self.requester,
+                access_token=gl_token,
+                url=self.instance_url,
+            )
+
+            # temporary fix to support gitlab deployments in sub-paths
+            gl.api_url = f"{self.instance_url}/api/v4/"
+
+            repo_id = urllib.parse.quote_plus(gl_fullname)
+
+            return await gl.getitem(f"/projects/{repo_id}/pipelines/{pipeline_id}")
+
     async def get_latest_pipeline(self, gl_fullname: str, ref: str) -> int:
         """gets the latest pipeline for an arbitrary GitLab repository and branch.
         Returns:

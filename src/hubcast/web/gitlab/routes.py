@@ -64,42 +64,13 @@ class GitLabRouter(routing.Router):
 
 router = GitLabRouter()
 
+# STATUS RELAYS
 
-async def _resolve_source_commit(
-    gl: GitLabClient,
-    project_path: str,
-    pipeline_sha: str,
-) -> tuple[str, str]:
-    """
-    To post status back to GitHub, we need to find the sha of the source commit from GitLab.
-    This is trivial for regular pipelines but requires extra checks for MR pipelines.
-
-    Args:
-        gl: GitLab client for API calls
-        project_path: the project namespace and name
-        pipeline_sha: the commit SHA associated with the pipeline
-
-    Returns:
-        Tuple of (source_commit_sha, pipeline_type)
-        - source_commit_sha: The SHA to use for GitHub status updates
-        - pipeline_type: "branch", "merge request", or "merged results"
-    """
-
-    # GitLab creates two types of MR pipelines:
-    # - regular: pipeline_sha is the source branch HEAD
-    # - merged results: pipeline_sha is a synthetic merge commit whose parents are [target HEAD, source HEAD]
-    # The regular MR pipeline is testing the same commit as a branch pipeline.
-    # However, we can't distinguish between the two MR pipeline types from the pipeline webhook payload.
-
-    commit_info = await gl.get_commit(project_path, pipeline_sha)
-    parents = commit_info["parent_ids"]
-
-    # Merged results pipelines: parent_ids == [target HEAD, source HEAD]
-    # Regular MR pipelines: parent_ids == [previous source commit];
-    #   the pipeline SHA itself is already source HEAD.
-    if len(parents) == 2:
-        return parents[1], "merged results"
-    return pipeline_sha, "merge request"
+# To post status back to GitHub, we need to find the sha of the source commit from GitLab.
+# This is trivial for regular pipelines but requires extra checks for MR pipelines.
+# GitLab creates two types of MR pipelines:
+# - regular: pipeline_sha is the source branch HEAD
+# - merged results: pipeline_sha is a synthetic merge commit whose parents are [target HEAD, source HEAD]
 
 
 @router.register("Pipeline Hook")
@@ -119,8 +90,18 @@ async def pipeline_status_relay(
     if not event.data.get("merge_request"):
         commit, pipeline_type = sha, "branch"
     else:
-        # could be either regular MR pipeline or merged results, need to make API call to check
-        commit, pipeline_type = await _resolve_source_commit(gl, project, sha)
+        # to distinguish between the MR pipelines, we need to fetch the pipeline details
+        # and check the ref's suffix
+        pipeline_info = await gl.get_pipeline(
+            project, event.data["object_attributes"]["id"]
+        )
+
+        if pipeline_info["ref"].endswith("/head"):
+            commit, pipeline_type = sha, "merge request"
+        elif pipeline_info["ref"].endswith("/merge"):
+            # API call to extract source HEAD
+            commit_info = await gl.get_commit(project, sha)
+            commit, pipeline_type = commit_info["parent_ids"][1], "merged results"
 
     name = f"{gh_check_name} [{pipeline_type}]" if create_mr else gh_check_name
 
@@ -158,11 +139,11 @@ async def job_status_relay(
     if not is_mr_event:
         commit, pipeline_type = sha, "branch"
     elif ref.endswith("/head"):
-        # regular MR pipeline; job hook exposes the type, no API call needed
         commit, pipeline_type = sha, "merge request"
     elif ref.endswith("/merge"):
-        # merged results pipeline; need API call to extract source HEAD
-        commit, pipeline_type = await _resolve_source_commit(gl, project, sha)
+        # API call to extract source HEAD
+        commit_info = await gl.get_commit(project, sha)
+        commit, pipeline_type = commit_info["parent_ids"][1], "merged results"
 
     job_id = event.data["build_id"]
     job_name = event.data["build_name"]
