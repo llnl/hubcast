@@ -44,6 +44,11 @@ Repo:
 
   # Optional: post message when draft sync is disabled (default: true)
   sync_drafts_msg: true
+
+  # Optional: create GitLab MRs from GitHub PRs
+  # allows developers to create synthetic merge commits using GitLab's merged results pipelines feature
+  # CI check labels will contain details about the pipeline type (branch, merge request, or merged results)
+  create_mr: false
 ```
 
 A minimal configuration requires only `dest_org` and `dest_name`:
