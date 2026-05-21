@@ -1,6 +1,5 @@
 import logging
 from typing import Any
-from urllib.parse import urlparse
 
 import aiohttp
 from gidgethub import HTTPException
@@ -56,8 +55,9 @@ class GitHubClient:
         ref: str,
         check_name: str,
         status: str,
+        title: str,
+        summary: str = "",  # github does not accept None values for this field
         details_url: str | None = None,
-        message: str | None = None,
     ) -> None:
         """
         Set the status of a GitHub check.
@@ -70,11 +70,12 @@ class GitHubClient:
             The name of the check.
         status: str
             The status of the check.
+        title: str
+            This message will be shown inline with the list of checks.
+        summary: str, optional
+            This message will be shown on the check's detail page.
         details_url: str, optional
-            A URL with more details about the check. Required if message is not provided.
-        message: str, optional
-            Used to convey a small message in the check output
-            (for example, to indicate a skipped sync, rather than forwarding pipeline status).
+            This URL will be included on the check's detail page to point users to external information.
 
         """
         # construct upload payload
@@ -83,18 +84,9 @@ class GitHubClient:
             "head_sha": ref,
         }
 
-        if message:
-            payload["output"] = {
-                "title": message,
-                "summary": "",  # summary can't be None
-            }
-        else:
-            gitlab_netloc = urlparse(details_url).netloc
+        payload["output"] = {"title": title, "summary": summary}
+        if details_url is not None:
             payload["details_url"] = details_url
-            payload["output"] = {
-                "title": "External Pipeline Run",
-                "summary": f"[View this pipeline on {gitlab_netloc}]({details_url})",
-            }
 
         # for success and failure status write out a conclusion
         if status in ("skipped", "success", "failure", "cancelled"):

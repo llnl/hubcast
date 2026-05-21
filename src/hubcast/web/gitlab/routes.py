@@ -1,5 +1,6 @@
 import logging
 from typing import Any
+from urllib.parse import urlparse
 
 from gidgetlab import routing, sansio
 
@@ -78,7 +79,14 @@ async def pipeline_status_relay(
     status = GITLAB_TO_GITHUB_STATUS.get(pipeline_status)
 
     if status:
-        await gh.set_check_status(ref, gh_check_name, status, pipeline_url)
+        await gh.set_check_status(
+            ref,
+            gh_check_name,
+            status,
+            title="External pipeline run",
+            summary=f"[View this pipeline on {urlparse(pipeline_url).netloc}]({pipeline_url})",
+            details_url=pipeline_url,
+        )
 
 
 @router.register("Job Hook")
@@ -100,4 +108,11 @@ async def job_status_relay(
     status = GITLAB_TO_GITHUB_STATUS.get(job_status)
 
     if status:
-        await gh.set_check_status(ref, name, status, job_url)
+        await gh.set_check_status(
+            ref,
+            name,
+            status,
+            title="External job run",
+            summary=f"[View this job on {urlparse(job_url).netloc}]({job_url})",
+            details_url=job_url,
+        )
