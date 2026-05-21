@@ -204,11 +204,11 @@ async def sync_pr(
     # between multiple repositories
     is_pull_request_fork = src_fullname != base_fullname
     if is_pull_request_fork:
-        sync_ref = f"refs/heads/pr-{pull_request_id}"
+        sync_branch = f"pr-{pull_request_id}"
     else:
-        sync_ref = f"refs/heads/{pull_request['head']['ref']}"
+        sync_branch = pull_request["head"]["ref"]
 
-    mr_src_branch = sync_ref.removeprefix("refs/heads/")
+    sync_ref = f"refs/heads/{sync_branch}"
 
     if is_pull_request_fork and src_repo_private:
         # GitHub apps will not have access to private forks
@@ -287,11 +287,11 @@ async def sync_pr(
 
     # skip already created MRs
     if repo_config.create_mr and not await gl.get_mr(
-        dest_fullname, mr_src_branch, default_branch
+        dest_fullname, sync_branch, default_branch
     ):
         await gl.create_mr(
             gl_fullname=dest_fullname,
-            src_branch=mr_src_branch,
+            src_branch=sync_branch,
             target_branch=default_branch,
             ref_title=pull_request["title"],
             ref_url=pull_request["html_url"],
