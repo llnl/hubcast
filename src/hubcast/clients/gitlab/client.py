@@ -83,11 +83,11 @@ class GitLabClient:
             gl.api_url = f"{self.instance_url}/api/v4/"
 
             repo_id = urllib.parse.quote_plus(gl_fullname)
-            filters = f"source_branch={src_branch}&target_branch={target_branch}&state=opened"
-
-            return await gl.getitem(
-                f"/projects/{repo_id}/merge_requests?{filters}"
+            filters = (
+                f"source_branch={src_branch}&target_branch={target_branch}&state=opened"
             )
+
+            return await gl.getitem(f"/projects/{repo_id}/merge_requests?{filters}")
 
     async def create_mr(
         self,
