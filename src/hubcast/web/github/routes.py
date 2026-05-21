@@ -241,7 +241,12 @@ async def sync_pr(
     have_shas = set(gl_refs.values())
     from_sha = gl_refs.get(sync_ref) or ("0" * 40)
 
-    if want_sha not in have_shas:  # needs sync
+    if want_sha in have_shas:
+        log.info(
+            "Destination ref already up-to-date",
+            extra={"ref": sync_ref},
+        )
+    else:  # needs sync
         if is_pull_request_fork and not src_repo_private:
             # no auth needed for public forks
             src_creds = {}
@@ -278,11 +283,6 @@ async def sync_pr(
             packfile,
             username=gl_user,
             password=gl_token,
-        )
-    else:
-        log.info(
-            "Destination ref already up-to-date",
-            extra={"ref": sync_ref},
         )
 
     # skip already created MRs
