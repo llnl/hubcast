@@ -89,7 +89,7 @@ async def _resolve_source_commit(
     # - regular: pipeline_sha is the source branch HEAD
     # - merged results: pipeline_sha is a synthetic merge commit whose parents are [target HEAD, source HEAD]
     # The regular MR pipeline is testing the same commit as a branch pipeline.
-    # However, we can't distinguish between the two MR pipeline types from the webhook payload.
+    # However, we can't distinguish between the two MR pipeline types from the pipeline webhook payload.
 
     commit_info = await gl.get_commit(project_path, pipeline_sha)
     parents = commit_info["parent_ids"]
