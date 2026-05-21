@@ -223,7 +223,7 @@ async def sync_pr(
         if repo_config.sync_drafts_msg:
             await gh.set_check_status(
                 want_sha,
-                repo_config.check_name,
+                repo_config.check_name or "hubcast",
                 status="skipped",
                 title="Hubcast disables sync for draft PRs.",
             )
