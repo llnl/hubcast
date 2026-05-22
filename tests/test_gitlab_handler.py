@@ -4,9 +4,12 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from gidgetlab import sansio
+from gidgetlab.exceptions import ValidationFailure
 
+from hubcast.exceptions import HubcastError
 from hubcast.web.gitlab.handler import GitLabHandler
 from hubcast.web.gitlab.routes import GitLabRouter
+from hubcast.webhook import RoutingTokenError
 
 ### FIXTURES
 
@@ -51,6 +54,29 @@ def mock_router():
     return GitLabRouter()
 
 
+@pytest.fixture
+def mock_routing_token():
+    """Mock routing token with default values."""
+    token = Mock()
+    token.gh_owner = "owner"
+    token.gh_repo = "repo"
+    token.gh_check = "gitlab-ci"
+    token.create_mr = False
+    return token
+
+
+@pytest.fixture
+def mock_event():
+    """Mock GitLab event with default data."""
+    return Mock(
+        event="Pipeline Hook",
+        data={
+            "object_attributes": {"status": "success"},
+            "user": {"username": "test-user"},
+        },
+    )
+
+
 ### TESTS
 
 # test the handle method in GitLabHandler
@@ -90,42 +116,45 @@ async def test_handle_valid_webhook(handler, mock_request):
 
 
 @pytest.mark.asyncio
-async def test_handle_exception(handler, mock_request):
-    """Should return 500 if an exception occurs."""
-
-    with (
-        patch("hubcast.web.gitlab.handler.RoutingToken.decode") as mock_decode,
-        patch("hubcast.web.gitlab.handler.sansio.Event.from_http") as mock_event,
-    ):
-        # Mock routing token validation
-        mock_routing_token = Mock()
-        mock_routing_token.gh_owner = "owner"
-        mock_routing_token.gh_repo = "repo"
-        mock_routing_token.gh_check = "gitlab-ci"
-        mock_decode.return_value = mock_routing_token
-
-        mock_event.side_effect = Exception("bug")
-        response = await handler.handle(mock_request)
-        assert response.status == 500
+async def test_handle_missing_token(handler, mock_request):
+    """Should return 401 when x-gitlab-token header is missing."""
+    mock_request.headers = {"x-gitlab-event": "Pipeline Hook"}
+    response = await handler.handle(mock_request)
+    assert response.status == 401
 
 
 @pytest.mark.asyncio
-async def test_handle_validation_failure(handler, mock_request):
+async def test_handle_invalid_token(handler, mock_request):
     """Should return 401 for an invalid routing token."""
-
-    from hubcast.webhook import RoutingTokenError
-
     mock_request.headers = {
         "x-gitlab-event": "Pipeline Hook",
         "x-gitlab-token": "invalid-token",
     }
 
     with patch("hubcast.web.gitlab.handler.RoutingToken.decode") as mock_decode:
-        # Simulate token validation failure
         mock_decode.side_effect = RoutingTokenError("Invalid token signature")
         response = await handler.handle(mock_request)
 
     assert response.status == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exception",
+    [
+        Exception("bug"),
+        HubcastError("error"),
+        ValidationFailure("invalid"),
+    ],
+)
+async def test_handle_server_errors(handler, mock_request, mock_routing_token, exception):
+    """Should return 500 for various exceptions."""
+    with (
+        patch("hubcast.web.gitlab.handler.RoutingToken.decode", return_value=mock_routing_token),
+        patch("hubcast.web.gitlab.handler.sansio.Event.from_http", side_effect=exception),
+    ):
+        response = await handler.handle(mock_request)
+        assert response.status == 500
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from gidgethub import sansio
 
+from hubcast.exceptions import HubcastError
 from hubcast.web.github.handler import GitHubHandler
 from hubcast.web.github.routes import GitHubRouter
 
@@ -100,14 +101,36 @@ async def test_handle_unauthorized(handler, mock_request):
 
 
 @pytest.mark.asyncio
-async def test_handle_exception(handler, mock_request):
-    """Should return 500 if an exception occurs during handling."""
+@pytest.mark.parametrize("event_type", ["installation", "installation_repositories"])
+async def test_handle_installation_events(handler, mock_request, event_type):
+    """Should return 200 and skip processing for installation events."""
 
     with patch("hubcast.web.github.handler.sansio.Event.from_http") as mock_event:
-        mock_event.side_effect = Exception("something awful happened")
+        mock_event.return_value = Mock(
+            event=event_type,
+            delivery_id="123",
+            data={
+                "sender": {"login": "user"},
+                "repository": {"owner": {"login": "owner"}, "name": "repo"},
+            },
+        )
 
         response = await handler.handle(mock_request)
+        assert response.status == 200
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exception",
+    [
+        Exception("something awful happened"),
+        HubcastError("test error"),
+    ],
+)
+async def test_handle_server_errors(handler, mock_request, exception):
+    """Should return 500 for various exceptions."""
+    with patch("hubcast.web.github.handler.sansio.Event.from_http", side_effect=exception):
+        response = await handler.handle(mock_request)
         assert response.status == 500
 
 
