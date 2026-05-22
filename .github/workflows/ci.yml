@@ -62,7 +62,7 @@ jobs:
     needs: changes
     uses: ./.github/workflows/style.yml
 
-  helm-style:
+  style-helm:
     if: needs.changes.outputs.helm == 'true'
     needs: changes
     uses: ./.github/workflows/helm-style.yml
@@ -97,7 +97,7 @@ jobs:
     needs:
      - changes
      - style
-     - helm
+     - style-helm
      - security
      # - unit-tests
      # - coverage
