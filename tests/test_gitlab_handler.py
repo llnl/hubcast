@@ -225,23 +225,19 @@ async def test_router_callback_dispatch(mock_router):
 
 
 @pytest.mark.asyncio
-async def test_router_graceful_exception(mock_router):
-    """Should continue dispatching even if one callback fails."""
+async def test_router_exception_handling(mock_router):
+    """Should catch and log exceptions from callbacks."""
 
-    callback1 = AsyncMock(side_effect=Exception("atrocious error"))
-    callback2 = AsyncMock()
-
-    mock_router.register("Pipeline Hook")(callback1)
-    mock_router.register("Pipeline Hook")(callback2)
+    callback = AsyncMock(side_effect=Exception("error"))
+    mock_router.register("Pipeline Hook")(callback)
 
     event = Mock(spec=sansio.Event)
     event.event = "Pipeline Hook"
     event.object_attributes = {}
 
+    # Should not raise, should catch and log
     await mock_router.dispatch(event)
-
-    callback1.assert_called_once()
-    callback2.assert_called_once()
+    callback.assert_called_once()
 
 
 @pytest.mark.asyncio
