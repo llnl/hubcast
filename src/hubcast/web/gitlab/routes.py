@@ -51,14 +51,9 @@ class GitLabRouter(routing.Router):
             try:
                 await callback(event, *args, **kwargs)
             except HubcastError as e:
-                e.log(log, event_type=event.event)
+                e.log(log)
             except Exception:
-                log.exception(
-                    "Failed to process GitLab webhook event",
-                    extra={
-                        "event_type": event.event,
-                    },
-                )
+                log.exception("Failed to process GitLab webhook event")
 
 
 router = GitLabRouter()

@@ -114,8 +114,7 @@ class GitLabClient:
             except gidgetlab.exceptions.BadRequest as exc:
                 if exc.status_code == 403:
                     log.info(
-                        "User cannot access GitLab webhooks; skipping set_webhook. Must have `maintainer` role.",
-                        extra={"user": self.user, "repo": gl_fullname},
+                        "User cannot access GitLab webhooks; skipping set_webhook. Must have `maintainer` role."
                     )
                     return
                 raise

@@ -7,6 +7,7 @@ from gidgetlab.exceptions import ValidationFailure
 
 from hubcast.clients.github import GitHubClientFactory
 from hubcast.exceptions import HubcastError
+from hubcast.logging import update_log_context
 from hubcast.web.gitlab.routes import router
 from hubcast.webhook import RoutingToken, RoutingTokenError
 
@@ -41,7 +42,16 @@ class GitLabHandler:
             # Pass token as secret for gidgetlab's string validation
             # (redundant from security perspective, but required by library)
             event = sansio.Event.from_http(request.headers, body, secret=token)
-            log.info("GitLab webhook received", extra={"event_type": event.event})
+
+            # Set request metadata in context
+            update_log_context(
+                event_type=event.event,
+                dest_repo_org=gh_repo_owner,
+                dest_repo_name=gh_repo,
+                gh_check_name=gh_check_name,
+            )
+
+            log.info("GitLab webhook received")
 
             github_client = self.github_client_factory.create_client(
                 gh_repo_owner, gh_repo
