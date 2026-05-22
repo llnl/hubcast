@@ -22,7 +22,7 @@ authors = [
 ]
 description = "An event driven synchronization application for bridging GitHub and GitLab."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
