@@ -2,7 +2,13 @@ import os
 
 import pytest
 
-from hubcast.config import Config, ConfigError
+from hubcast.config import Config, ConfigError, GitHubConfig
+
+
+@pytest.fixture
+def gh_defaults():
+    """Default GitHub config values for testing."""
+    return {"app_id": "123", "private_key": "key", "webhook_secret": "secret"}
 
 
 def test_load_config_missing_required():
@@ -50,3 +56,19 @@ def test_config_with_env_vars():
         for key in list(os.environ.keys()):
             if key.startswith("HC_"):
                 del os.environ[key]
+
+
+def test_bot_caller_normalization(gh_defaults):
+    """Should normalize bot_caller to start with @ or /."""
+
+    # Bare username should add @
+    config = GitHubConfig(**gh_defaults, bot_caller="hubcast")
+    assert config.bot_caller == "@hubcast"
+
+    # @ prefix should keep as is
+    config = GitHubConfig(**gh_defaults, bot_caller="@hubcast")
+    assert config.bot_caller == "@hubcast"
+
+    # / prefix should keep as is
+    config = GitHubConfig(**gh_defaults, bot_caller="/hubcast")
+    assert config.bot_caller == "/hubcast"

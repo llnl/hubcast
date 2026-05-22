@@ -62,6 +62,14 @@ def test_create_config_full():
     assert config.sync_drafts_msg is False
 
 
+def test_validator_with_non_dict():
+    """Should handle non-dict input by passing through to other validators."""
+    # The validator should pass through non-dict data
+    # This will fail validation at a later stage, but exercises the fallback path
+    with pytest.raises(Exception):
+        RepoConfig.model_validate("not a dict")
+
+
 @pytest.mark.asyncio
 async def test_get_repo_config_uses_cache(mock_github_client):
     """Should use cached config on second call."""
