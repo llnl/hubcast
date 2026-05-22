@@ -5,7 +5,11 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from hubcast.exceptions import HubcastError
-from hubcast.web.gitlab.routes import GitLabRouter, job_status_relay, pipeline_status_relay
+from hubcast.web.gitlab.routes import (
+    GitLabRouter,
+    job_status_relay,
+    pipeline_status_relay,
+)
 
 ### FIXTURES
 
@@ -102,13 +106,20 @@ async def test_pipeline_status_mapping(
     ],
 )
 async def test_pipeline_commit_resolution(
-    merge_request, ref_suffix, expected_commit, expected_type,
-    base_pipeline_event, mock_gh, mock_gl
+    merge_request,
+    ref_suffix,
+    expected_commit,
+    expected_type,
+    base_pipeline_event,
+    mock_gh,
+    mock_gl,
 ):
     """Should resolve correct commit SHA for different pipeline types."""
     if merge_request:
         base_pipeline_event["merge_request"] = merge_request
-        mock_gl.get_pipeline.return_value = {"ref": f"refs/merge-requests/1{ref_suffix}"}
+        mock_gl.get_pipeline.return_value = {
+            "ref": f"refs/merge-requests/1{ref_suffix}"
+        }
 
     event = make_event(base_pipeline_event)
     await pipeline_status_relay(event, mock_gh, mock_gl, "ci", create_mr=True)

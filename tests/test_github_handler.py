@@ -129,7 +129,9 @@ async def test_handle_installation_events(handler, mock_request, event_type):
 )
 async def test_handle_server_errors(handler, mock_request, exception):
     """Should return 500 for various exceptions."""
-    with patch("hubcast.web.github.handler.sansio.Event.from_http", side_effect=exception):
+    with patch(
+        "hubcast.web.github.handler.sansio.Event.from_http", side_effect=exception
+    ):
         response = await handler.handle(mock_request)
         assert response.status == 500
 

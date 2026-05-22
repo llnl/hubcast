@@ -147,11 +147,18 @@ async def test_handle_invalid_token(handler, mock_request):
         ValidationFailure("invalid"),
     ],
 )
-async def test_handle_server_errors(handler, mock_request, mock_routing_token, exception):
+async def test_handle_server_errors(
+    handler, mock_request, mock_routing_token, exception
+):
     """Should return 500 for various exceptions."""
     with (
-        patch("hubcast.web.gitlab.handler.RoutingToken.decode", return_value=mock_routing_token),
-        patch("hubcast.web.gitlab.handler.sansio.Event.from_http", side_effect=exception),
+        patch(
+            "hubcast.web.gitlab.handler.RoutingToken.decode",
+            return_value=mock_routing_token,
+        ),
+        patch(
+            "hubcast.web.gitlab.handler.sansio.Event.from_http", side_effect=exception
+        ),
     ):
         response = await handler.handle(mock_request)
         assert response.status == 500
