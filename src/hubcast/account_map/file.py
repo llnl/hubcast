@@ -35,6 +35,7 @@ class FileMap(AccountMap):
             with open(path, "r") as f:
                 data = yaml.safe_load(f)
                 self.users = data["Users"]
+                pass
         except FileNotFoundError:
             raise FileMapError(f"File map not found. path={path}")
         except yaml.YAMLError:
