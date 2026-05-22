@@ -88,7 +88,7 @@ async def pipeline_status_relay(
     project = event.data["project"]["path_with_namespace"]
 
     if not event.data.get("merge_request"):
-        commit, pipeline_type = sha, "branch"
+        commit, pipeline_type = sha, "non-mr-branch"
     else:
         # to distinguish between the MR pipelines, we need to fetch the pipeline details
         # and check the ref's suffix
@@ -97,11 +97,11 @@ async def pipeline_status_relay(
         )
 
         if pipeline_info["ref"].endswith("/head"):
-            commit, pipeline_type = sha, "merge request"
+            commit, pipeline_type = sha, "branch"
         elif pipeline_info["ref"].endswith("/merge"):
             # API call to extract source HEAD
             commit_info = await gl.get_commit(project, sha)
-            commit, pipeline_type = commit_info["parent_ids"][1], "merged results"
+            commit, pipeline_type = commit_info["parent_ids"][1], "merge request"
 
     name = f"{gh_check_name} [{pipeline_type}]" if create_mr else gh_check_name
 
@@ -137,13 +137,13 @@ async def job_status_relay(
     is_mr_event = ref.startswith("refs/merge-requests/")
 
     if not is_mr_event:
-        commit, pipeline_type = sha, "branch"
+        commit, pipeline_type = sha, "non-mr-branch"
     elif ref.endswith("/head"):
-        commit, pipeline_type = sha, "merge request"
+        commit, pipeline_type = sha, "branch"
     elif ref.endswith("/merge"):
         # API call to extract source HEAD
         commit_info = await gl.get_commit(project, sha)
-        commit, pipeline_type = commit_info["parent_ids"][1], "merged results"
+        commit, pipeline_type = commit_info["parent_ids"][1], "merge request"
 
     job_id = event.data["build_id"]
     job_name = event.data["build_name"]
