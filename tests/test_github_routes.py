@@ -3,13 +3,16 @@
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from gidgethub import sansio
 
+from hubcast.exceptions import HubcastError
 from hubcast.web.github.routes import (
     remove_branch,
     remove_pr,
     rerun_check,
     respond_comment,
     respond_pr_comment,
+    router,
     sync_branch,
     sync_pr_event,
 )
@@ -207,7 +210,99 @@ def mock_repligit_ops():
         }
 
 
+@pytest.fixture
+def internal_pr_data(mock_pr_data_for_comment):
+    """PR from same repo (not a fork)."""
+    mock_pr_data_for_comment["head"]["repo"]["full_name"] = "owner/repo"
+    mock_pr_data_for_comment["base"]["repo"]["full_name"] = "owner/repo"
+    mock_pr_data_for_comment["head"]["ref"] = "feature-branch"
+    return mock_pr_data_for_comment
+
+
+@pytest.fixture
+def setup_pr_mocks(mock_gh, mock_repligit_ops):
+    """Configure mocks for PR-based tests."""
+
+    def _setup(pr_data, needs_sync=True):
+        mock_gh.get_pr = AsyncMock(return_value=pr_data)
+        if needs_sync:
+            mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
+
+    return _setup
+
+
+@pytest.fixture
+def setup_pipeline_mocks(mock_gl):
+    """Configure mocks for pipeline operations."""
+
+    def _setup(run_success=True, pipeline_exists=True, retry_success=True):
+        if run_success:
+            mock_gl.run_pipeline = AsyncMock(
+                return_value="https://gitlab.com/pipeline/123"
+            )
+        else:
+            mock_gl.run_pipeline = AsyncMock(return_value=None)
+
+        if pipeline_exists:
+            mock_gl.get_latest_pipeline = AsyncMock(return_value=789)
+            if retry_success:
+                mock_gl.retry_pipeline_jobs = AsyncMock(
+                    return_value="https://gitlab.com/pipeline/789"
+                )
+            else:
+                mock_gl.retry_pipeline_jobs = AsyncMock(return_value=None)
+        else:
+            mock_gl.get_latest_pipeline = AsyncMock(return_value=None)
+
+    return _setup
+
+
+@pytest.fixture
+def call_respond_comment(mock_comment_event, mock_gh, mock_gl):
+    """Helper to call respond_comment with a given command."""
+
+    async def _call(command_body):
+        mock_comment_event.data["comment"]["body"] = command_body
+        return await respond_comment(mock_comment_event, mock_gh, mock_gl, "gl-user")
+
+    return _call
+
+
+@pytest.fixture
+def call_respond_pr_comment(mock_review_event, mock_gh, mock_gl):
+    """Helper to call respond_pr_comment with a given command."""
+
+    async def _call(command_body):
+        mock_review_event.data["review"]["body"] = command_body
+        return await respond_pr_comment(mock_review_event, mock_gh, mock_gl, "gl-user")
+
+    return _call
+
+
 ### UNIT TESTS
+
+# Tests for router error handling
+
+
+@pytest.mark.asyncio
+async def test_github_dispatch_logs_hubcast_errors():
+    """Should log HubcastError without crashing."""
+
+    async def failing_handler(event, *args, **kwargs):
+        raise HubcastError("Test error message", log_level="ERROR")
+
+    event = sansio.Event({"ref": "refs/heads/main"}, event="push", delivery_id="123")
+
+    # Temporarily register our failing handler
+    original_handlers = router._shallow_routes.get("push", [])
+    router._shallow_routes["push"] = [failing_handler]
+
+    try:
+        # Should not raise - error should be logged
+        await router.dispatch(event)
+    finally:
+        router._shallow_routes["push"] = original_handlers
+
 
 # Tests for sync_branch
 
@@ -392,6 +487,90 @@ async def test_sync_pr_synced_internal(
     assert result["action"] == "synced"
 
 
+@pytest.mark.asyncio
+async def test_sync_pr_opened_uses_head_sha(
+    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops
+):
+    """PR opened event should use head sha instead of after field."""
+
+    # Change action to "opened" instead of "synchronize"
+    mock_pr_event.data["action"] = "opened"
+    mock_pr_event.data["pull_request"]["head"]["sha"] = "head-sha-456"
+
+    mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
+
+    result = await sync_pr_event(
+        event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+    )
+
+    assert result["action"] == "synced"
+    assert result["sha"] == "head-sha-456"
+
+
+@pytest.mark.asyncio
+async def test_sync_pr_creates_mr_when_configured(
+    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops
+):
+    """Should create MR on GitLab when create_mr config is enabled and MR doesn't exist."""
+
+    # Add title and html_url to PR data
+    mock_pr_event.data["pull_request"]["title"] = "Test PR"
+    mock_pr_event.data["pull_request"]["html_url"] = (
+        "https://github.com/owner/repo/pull/123"
+    )
+
+    # Configure repo to create MRs
+    mock_repligit_ops["get_repo_config"].return_value = (
+        Mock(
+            dest_org="owner",
+            dest_name="repo",
+            create_mr=True,
+        ),
+        True,
+    )
+
+    mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
+    mock_gl.get_mr = AsyncMock(return_value=None)  # No MR exists yet
+    mock_gl.create_mr = AsyncMock()
+
+    result = await sync_pr_event(
+        event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+    )
+
+    assert result["action"] == "synced"
+    assert result["mr_created"] is True
+    mock_gl.create_mr.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_sync_pr_skips_mr_when_already_exists(
+    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops
+):
+    """Should skip MR creation when MR already exists."""
+
+    # Configure repo to create MRs
+    mock_repligit_ops["get_repo_config"].return_value = (
+        Mock(
+            dest_org="owner",
+            dest_name="repo",
+            create_mr=True,
+        ),
+        True,
+    )
+
+    mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
+    mock_gl.get_mr = AsyncMock(return_value={"id": 42})  # MR already exists
+    mock_gl.create_mr = AsyncMock()
+
+    result = await sync_pr_event(
+        event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+    )
+
+    assert result["action"] == "synced"
+    assert "mr_created" not in result
+    mock_gl.create_mr.assert_not_called()
+
+
 # Tests for remove_pr
 
 
@@ -473,53 +652,63 @@ async def test_remove_pr_deleted(
 
 
 @pytest.mark.asyncio
-async def test_respond_comment_skip_non_pr_comments(
-    mock_comment_event, mock_gh, mock_gl, mock_repligit_ops
+@pytest.mark.parametrize(
+    "command,expected_action,expected_reason,is_pr",
+    [
+        ("@hubcast-bot help", "help_sent", None, True),
+        ("@hubcast-bot approve", "approval_reminder_sent", None, True),
+        ("random text", "skipped", "no_command_matched", True),
+        ("@hubcast-bot help", "skipped", "not_pr_comment", False),  # issue comment
+    ],
+)
+async def test_respond_comment_simple_commands(
+    command,
+    expected_action,
+    expected_reason,
+    is_pr,
+    mock_comment_event,
+    mock_repligit_ops,
+    call_respond_comment,
 ):
-    """Skip commenting on issues (not PRs)."""
-    del mock_comment_event.data["issue"]["pull_request"]
+    """Should handle simple commands (help, approve, unmatched) and non-PR comments."""
+    if not is_pr:
+        del mock_comment_event.data["issue"]["pull_request"]
 
-    result = await respond_comment(
-        event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
+    result = await call_respond_comment(command)
 
-    assert result["action"] == "skipped"
-    assert result["reason"] == "not_pr_comment"
+    assert result["action"] == expected_action
+    if expected_reason:
+        assert result["reason"] == expected_reason
 
 
 @pytest.mark.asyncio
-async def test_respond_comment_help(
-    mock_comment_event, mock_gh, mock_gl, mock_repligit_ops
-):
-    """Should respond with help message when @bot help is mentioned."""
-    mock_comment_event.data["comment"]["body"] = "@hubcast-bot help"
-
-    result = await respond_comment(
-        event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
-
-    assert result["action"] == "help_sent"
-
-
-@pytest.mark.asyncio
-async def test_respond_comment_approve(
-    mock_review_event,
+@pytest.mark.parametrize(
+    "command,expected_action,expected_reason,needs_pr_setup",
+    [
+        ("@hubcast-bot approve", "approve_sent", None, True),
+        ("Looks good to me!", "skipped", "no_command_matched", False),
+    ],
+)
+async def test_respond_pr_comment_commands(
+    command,
+    expected_action,
+    expected_reason,
+    needs_pr_setup,
     mock_gh,
-    mock_gl,
     mock_repligit_ops,
     mock_pr_data_for_comment,
+    call_respond_pr_comment,
 ):
-    """Should sync PR when @bot approve is mentioned."""
-    mock_gh.get_pr = AsyncMock(return_value=mock_pr_data_for_comment)
+    """Should handle PR review comments (approve or no command)."""
+    if needs_pr_setup:
+        mock_gh.get_pr = AsyncMock(return_value=mock_pr_data_for_comment)
+        mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
 
-    # old sha to simulate out-of-date destination
-    mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
+    result = await call_respond_pr_comment(command)
 
-    result = await respond_pr_comment(
-        event=mock_review_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
-
-    assert result["action"] == "approve_sent"
+    assert result["action"] == expected_action
+    if expected_reason:
+        assert result["reason"] == expected_reason
 
 
 @pytest.mark.asyncio
@@ -557,6 +746,46 @@ async def test_respond_comment_run_pipeline(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    "is_internal,run_success,expected_action,expected_branch",
+    [
+        (True, True, "pipeline_started", "feature-branch"),  # internal PR success
+        (False, True, "pipeline_started", "pr-123"),  # fork PR success
+        (True, False, "pipeline_failed", "feature-branch"),  # internal PR failed
+    ],
+)
+async def test_respond_comment_run_pipeline_variations(
+    is_internal,
+    run_success,
+    expected_action,
+    expected_branch,
+    mock_comment_event,
+    mock_gh,
+    mock_gl,
+    mock_pr_data_for_comment,
+    setup_pr_mocks,
+    setup_pipeline_mocks,
+):
+    """Should handle pipeline start for internal/fork PRs and success/failure."""
+    mock_comment_event.data["comment"]["body"] = "@hubcast-bot run pipeline"
+
+    if is_internal:
+        mock_pr_data_for_comment["head"]["repo"]["full_name"] = "owner/repo"
+        mock_pr_data_for_comment["base"]["repo"]["full_name"] = "owner/repo"
+        mock_pr_data_for_comment["head"]["ref"] = "feature-branch"
+
+    setup_pr_mocks(mock_pr_data_for_comment)
+    setup_pipeline_mocks(run_success=run_success)
+
+    result = await respond_comment(
+        event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+    )
+
+    assert result["action"] == expected_action
+    assert result["branch"] == expected_branch
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     "command",
     [
         "@hubcast-bot restart failed",
@@ -590,19 +819,45 @@ async def test_respond_comment_restart_jobs(
 
 
 @pytest.mark.asyncio
-async def test_respond_comment_ignores_unmatched_commands(
-    mock_comment_event, mock_gh, mock_gl, mock_repligit_ops
+@pytest.mark.parametrize(
+    "is_internal,pipeline_exists,retry_success,expected_action,expected_branch",
+    [
+        (True, True, True, "jobs_restarted", "feature-branch"),  # internal success
+        (False, True, True, "jobs_restarted", "pr-123"),  # fork success
+        (True, True, False, "jobs_restart_failed", "feature-branch"),  # retry failed
+        (True, False, False, "no_pipeline", "feature-branch"),  # no pipeline
+    ],
+)
+async def test_respond_comment_restart_jobs_variations(
+    is_internal,
+    pipeline_exists,
+    retry_success,
+    expected_action,
+    expected_branch,
+    mock_comment_event,
+    mock_gh,
+    mock_gl,
+    mock_pr_data_for_comment,
+    setup_pr_mocks,
+    setup_pipeline_mocks,
 ):
-    """Should return skipped when comment doesn't match any command."""
+    """Should handle restart jobs for various scenarios."""
+    mock_comment_event.data["comment"]["body"] = "@hubcast-bot restart failed"
 
-    mock_comment_event.data["comment"]["body"] = "hi"
+    if is_internal:
+        mock_pr_data_for_comment["head"]["repo"]["full_name"] = "owner/repo"
+        mock_pr_data_for_comment["base"]["repo"]["full_name"] = "owner/repo"
+        mock_pr_data_for_comment["head"]["ref"] = "feature-branch"
+
+    setup_pr_mocks(mock_pr_data_for_comment)
+    setup_pipeline_mocks(pipeline_exists=pipeline_exists, retry_success=retry_success)
 
     result = await respond_comment(
         event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "skipped"
-    assert result["reason"] == "no_command_matched"
+    assert result["action"] == expected_action
+    assert result["branch"] == expected_branch
 
 
 # Tests for rerun_check

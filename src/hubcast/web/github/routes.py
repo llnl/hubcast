@@ -199,7 +199,7 @@ async def sync_pr(
     src_repo_private: bool,
     want_sha: str,
     default_branch: str,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Sync the git fork/branch referenced in a PR to GitLab.
 
     This isn't technically an event handler, but is used a couple different ways in this file.
@@ -252,12 +252,13 @@ async def sync_pr(
     have_shas = set(gl_refs.values())
     from_sha = gl_refs.get(sync_ref) or ("0" * 40)
 
+    return_val: dict[str, Any]
     if want_sha in have_shas:
         log.info(
             "Destination ref already up-to-date",
             extra={"ref": sync_ref},
         )
-        return_state = {"action": "skipped", "reason": "up_to_date"}
+        return_val = {"action": "skipped", "reason": "up_to_date"}
     else:  # needs sync
         if is_pull_request_fork and not src_repo_private:
             # no auth needed for public forks
@@ -297,7 +298,7 @@ async def sync_pr(
             password=gl_token,
         )
 
-        return_state = {"action": "synced"}
+        return_val = {"action": "synced", "sha": want_sha}
 
     # skip already created MRs
     if repo_config.create_mr and not await gl.get_mr(
@@ -310,8 +311,9 @@ async def sync_pr(
             ref_title=pull_request["title"],
             ref_url=pull_request["html_url"],
         )
+        return_val["mr_created"] = True
 
-    return return_state
+    return return_val
 
 
 @router.register("pull_request", action="opened")
@@ -324,7 +326,7 @@ async def sync_pr_event(
     gl_user: str,
     *arg,
     **kwargs,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Sync the git fork/branch referenced in a PR to GitLab."""
     pull_request = event.data["pull_request"]
     src_repo_private = pull_request["head"]["repo"]["private"]
@@ -470,6 +472,7 @@ async def respond_comment(
             "to submit an approval. This ensures the approval is tied to a specific "
             "commit to avoid unintended syncing of malicious commits."
         )
+        return_val = {"action": "approval_reminder_sent"}
 
     elif re.search(
         f"{gh.bot_caller} (re[-]?)?(run|start) pipeline", comment, re.IGNORECASE
@@ -503,10 +506,10 @@ async def respond_comment(
         if pipeline_url:
             response = f"I've started a new [pipeline]({pipeline_url}) for you!"
             plus_one = True
+            return_val = {"action": "pipeline_started", "branch": branch}
         else:
             response = "I had a problem starting the pipeline."
-
-        return_val = {"action": "pipeline_started"}
+            return_val = {"action": "pipeline_failed", "branch": branch}
 
     elif re.search(
         f"{gh.bot_caller} restart failed(?:[- ]?jobs)?", comment, re.IGNORECASE
@@ -542,12 +545,13 @@ async def respond_comment(
                     f"I've retried any failed jobs in the [pipeline]({pipeline_url})!"
                 )
                 plus_one = True
+                return_val = {"action": "jobs_restarted", "branch": branch}
             else:
                 response = "I had a problem retrying jobs in the pipeline."
+                return_val = {"action": "jobs_restart_failed", "branch": branch}
         else:
             response = "No pipeline exists."
-
-        return_val = {"action": "jobs_restarted"}
+            return_val = {"action": "no_pipeline", "branch": branch}
 
     if response:
         await gh.post_comment(event.data["issue"]["number"], response)
