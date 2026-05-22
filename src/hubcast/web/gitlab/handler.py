@@ -6,6 +6,7 @@ from gidgetlab import sansio
 from gidgetlab.exceptions import ValidationFailure
 
 from hubcast.clients.github import GitHubClientFactory
+from hubcast.clients.gitlab import GitLabClientFactory
 from hubcast.exceptions import HubcastError
 from hubcast.logging import update_log_context
 from hubcast.web.gitlab.routes import router
@@ -15,9 +16,15 @@ log = logging.getLogger(__name__)
 
 
 class GitLabHandler:
-    def __init__(self, webhook_secret: str, github_client_factory: GitHubClientFactory):
+    def __init__(
+        self,
+        webhook_secret: str,
+        github_client_factory: GitHubClientFactory,
+        gitlab_client_factory: GitLabClientFactory,
+    ):
         self.webhook_secret = webhook_secret
         self.github_client_factory = github_client_factory
+        self.gitlab_client_factory = gitlab_client_factory
 
     async def handle(self, request: web.Request) -> web.Response:
         try:
@@ -36,6 +43,7 @@ class GitLabHandler:
             gh_repo_owner = routing_token.gh_owner
             gh_repo = routing_token.gh_repo
             gh_check_name = routing_token.gh_check
+            create_mr = routing_token.create_mr
 
             body = await request.read()
 
@@ -56,9 +64,13 @@ class GitLabHandler:
                 gh_repo_owner, gh_repo
             )
 
+            gl_user = event.data["user"]["username"]
+            gitlab_client = self.gitlab_client_factory.create_client(gl_user)
             await spawn(
                 request,
-                router.dispatch(event, github_client, gh_check_name),
+                router.dispatch(
+                    event, github_client, gitlab_client, gh_check_name, create_mr
+                ),
             )
 
             # return a "Success"

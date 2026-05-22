@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 from gidgetlab import routing, sansio
 
 from hubcast.clients.github.client import GitHubClient
+from hubcast.clients.gitlab.client import GitLabClient
 from hubcast.exceptions import HubcastError
 
 log = logging.getLogger(__name__)
@@ -58,14 +59,46 @@ class GitLabRouter(routing.Router):
 
 router = GitLabRouter()
 
+# STATUS RELAYS
+
+# To post status back to GitHub, we need to find the sha of the source commit from GitLab.
+# This is trivial for regular pipelines but requires extra checks for MR pipelines.
+# GitLab creates two types of MR pipelines:
+# - regular: pipeline_sha is the source branch HEAD
+# - merged results: pipeline_sha is a synthetic merge commit whose parents are [target HEAD, source HEAD]
+
 
 @router.register("Pipeline Hook")
 async def pipeline_status_relay(
-    event: sansio.Event, gh: GitHubClient, gh_check_name: str, *arg, **kwargs
+    event: sansio.Event,
+    gh: GitHubClient,
+    gl: GitLabClient,
+    gh_check_name: str,
+    create_mr: bool,
+    *args,
+    **kwargs,
 ) -> None:
     """Relay status of a GitLab pipeline back to GitHub."""
-    # get ref from event
-    ref = event.data["object_attributes"]["sha"]
+    sha = event.data["object_attributes"]["sha"]
+    project = event.data["project"]["path_with_namespace"]
+
+    if not event.data.get("merge_request"):
+        commit, pipeline_type = sha, "non-mr-branch"
+    else:
+        # to distinguish between the MR pipelines, we need to fetch the pipeline details
+        # and check the ref's suffix
+        pipeline_info = await gl.get_pipeline(
+            project, event.data["object_attributes"]["id"]
+        )
+
+        if pipeline_info["ref"].endswith("/head"):
+            commit, pipeline_type = sha, "branch"
+        elif pipeline_info["ref"].endswith("/merge"):
+            # API call to extract source HEAD
+            commit_info = await gl.get_commit(project, sha)
+            commit, pipeline_type = commit_info["parent_ids"][1], "merge request"
+
+    name = f"{gh_check_name} [{pipeline_type}]" if create_mr else gh_check_name
 
     # get status from event
     pipeline_status = event.data["object_attributes"]["status"]
@@ -75,8 +108,8 @@ async def pipeline_status_relay(
 
     if status:
         await gh.set_check_status(
-            ref,
-            gh_check_name,
+            commit,
+            name,
             status,
             title="External pipeline run",
             summary=f"[View this pipeline on {urlparse(pipeline_url).netloc}]({pipeline_url})",
@@ -86,11 +119,28 @@ async def pipeline_status_relay(
 
 @router.register("Job Hook")
 async def job_status_relay(
-    event: sansio.Event, gh: GitHubClient, gh_check_name: str, *arg, **kwargs
+    event: sansio.Event,
+    gh: GitHubClient,
+    gl: GitLabClient,
+    gh_check_name: str,
+    create_mr: bool,
+    *args,
+    **kwargs,
 ) -> None:
     """Relay status of a GitLab job back to GitHub."""
-    # get ref from event
-    ref = event.data["sha"]
+    sha = event.data["sha"]
+    project = event.data["project"]["path_with_namespace"]
+    ref = event.data.get("ref", "")
+    is_mr_event = ref.startswith("refs/merge-requests/")
+
+    if not is_mr_event:
+        commit, pipeline_type = sha, "non-mr-branch"
+    elif ref.endswith("/head"):
+        commit, pipeline_type = sha, "branch"
+    elif ref.endswith("/merge"):
+        # API call to extract source HEAD
+        commit_info = await gl.get_commit(project, sha)
+        commit, pipeline_type = commit_info["parent_ids"][1], "merge request"
 
     job_id = event.data["build_id"]
     job_name = event.data["build_name"]
@@ -100,11 +150,13 @@ async def job_status_relay(
     job_url = f"{repository_url}/-/jobs/{job_id}"
 
     name = f"{gh_check_name} / {job_name}" if gh_check_name else job_name
+    name = f"{name} [{pipeline_type}]" if create_mr else name
+
     status = GITLAB_TO_GITHUB_STATUS.get(job_status)
 
     if status:
         await gh.set_check_status(
-            ref,
+            commit,
             name,
             status,
             title="External job run",

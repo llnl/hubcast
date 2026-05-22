@@ -1,6 +1,6 @@
 import logging
 import urllib.parse
-from typing import Literal
+from typing import Any, Literal
 
 import aiohttp
 import gidgetlab.aiohttp
@@ -66,6 +66,71 @@ class GitLabClient:
         self.webhook_secret = webhook_secret
         self.user = user
 
+    async def get_mr(
+        self, gl_fullname: str, src_branch: str, target_branch: str
+    ) -> list[dict[str, Any]]:
+        gl_token = await self.auth.authenticate_user(self.user)
+
+        async with aiohttp.ClientSession() as session:
+            gl = gidgetlab.aiohttp.GitLabAPI(
+                session,
+                requester=self.requester,
+                access_token=gl_token,
+                url=self.instance_url,
+            )
+
+            # temporary fix to support gitlab deployments in sub-paths
+            gl.api_url = f"{self.instance_url}/api/v4/"
+
+            repo_id = urllib.parse.quote_plus(gl_fullname)
+            filters = (
+                f"source_branch={src_branch}&target_branch={target_branch}&state=opened"
+            )
+
+            return await gl.getitem(f"/projects/{repo_id}/merge_requests?{filters}")
+
+    async def create_mr(
+        self,
+        gl_fullname: str,
+        src_branch: str,
+        target_branch: str,
+        ref_title: int,
+        ref_url: str,
+    ):
+        """Create a merge request in GitLab.
+
+        Args:
+            gl_fullname: GitLab project name
+            src_branch: Source branch for the MR
+            target_branch: Target (base) branch for the MR
+            ref_title: GitHub PR title
+            ref_url: GitHub PR URL to include in the MR description
+        """
+        gl_token = await self.auth.authenticate_user(username=self.user)
+
+        async with aiohttp.ClientSession() as session:
+            gl = gidgetlab.aiohttp.GitLabAPI(
+                session,
+                requester=self.requester,
+                access_token=gl_token,
+                url=self.instance_url,
+            )
+
+            # temporary fix to support gitlab deployments in sub-paths
+            gl.api_url = f"{self.instance_url}/api/v4/"
+
+            repo_id = urllib.parse.quote_plus(gl_fullname)
+
+            await gl.post(
+                f"/projects/{repo_id}/merge_requests",
+                data={
+                    "source_branch": src_branch,
+                    "target_branch": target_branch,
+                    "title": ref_title,
+                    "description": ref_url,
+                },
+            )
+
     async def set_webhook(
         self,
         dest_org: str,
@@ -74,6 +139,7 @@ class GitLabClient:
         gh_repo: str,
         gh_check: str,
         check_types: list[Literal["pipeline", "jobs"]],
+        create_mr: bool,
     ) -> None:
         gl_token = await self.auth.authenticate_user(username=self.user)
         gl_fullname = f"{dest_org}/{dest_repo}"
@@ -83,6 +149,7 @@ class GitLabClient:
             gh_owner=gh_owner,
             gh_repo=gh_repo,
             gh_check=gh_check,
+            create_mr=create_mr,
         )
         token = routing_token.encode(self.webhook_secret)
 
@@ -133,6 +200,26 @@ class GitLabClient:
             # otherwise update the existing hook with the new config
             url = f"/projects/{repo_id}/hooks/{existing_hook['id']}"
             await gl.put(url, data=new_hook)
+
+    async def get_pipeline(self, gl_fullname: str, pipeline_id: int) -> dict:
+        """Gets a pipeline object for a GitLab project."""
+
+        gl_token = await self.auth.authenticate_user(self.user)
+
+        async with aiohttp.ClientSession() as session:
+            gl = gidgetlab.aiohttp.GitLabAPI(
+                session,
+                requester=self.requester,
+                access_token=gl_token,
+                url=self.instance_url,
+            )
+
+            # temporary fix to support gitlab deployments in sub-paths
+            gl.api_url = f"{self.instance_url}/api/v4/"
+
+            repo_id = urllib.parse.quote_plus(gl_fullname)
+
+            return await gl.getitem(f"/projects/{repo_id}/pipelines/{pipeline_id}")
 
     async def get_latest_pipeline(self, gl_fullname: str, ref: str) -> int:
         """gets the latest pipeline for an arbitrary GitLab repository and branch.
@@ -213,3 +300,22 @@ class GitLabClient:
             )
 
             return pipeline.get("web_url")
+
+    async def get_commit(self, gl_fullname: str, sha: str) -> dict:
+        """Get details for a commit SHA in a project"""
+        gl_token = await self.auth.authenticate_user(self.user)
+
+        async with aiohttp.ClientSession() as session:
+            gl = gidgetlab.aiohttp.GitLabAPI(
+                session,
+                requester=self.requester,
+                access_token=gl_token,
+                url=self.instance_url,
+            )
+
+            # temporary fix to support gitlab deployments in sub-paths
+            gl.api_url = f"{self.instance_url}/api/v4/"
+
+            repo_id = urllib.parse.quote_plus(gl_fullname)
+
+            return await gl.getitem(f"/projects/{repo_id}/repository/commits/{sha}")

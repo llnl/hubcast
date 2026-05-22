@@ -129,6 +129,7 @@ def main():
     gl_handler = GitLabHandler(
         conf.gl.webhook_secret,
         gh_client_factory,
+        gl_client_factory,
     )
 
     log.info("Starting HTTP server")

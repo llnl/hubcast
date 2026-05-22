@@ -52,15 +52,15 @@ async def sync_branch(
     src_owner, src_repo_name = src_fullname.split("/")
     # the commit the push event is referencing
     want_sha = event.data["after"]
-    target_ref = event.data["ref"]
+    sync_ref = event.data["ref"]
 
     # skip branches from push events that are also pull requests
-    if await gh.get_prs(branch=target_ref):
+    if await gh.get_prs(branch=sync_ref):
         return
 
     # only refresh config on default branch pushes (where .github/hubcast.yml lives)
     default_branch = event.data["repository"]["default_branch"]
-    is_default_branch = target_ref == f"refs/heads/{default_branch}"
+    is_default_branch = sync_ref == f"refs/heads/{default_branch}"
     repo_config, fetched = await get_repo_config(
         gh, src_fullname, refresh=is_default_branch
     )
@@ -78,6 +78,7 @@ async def sync_branch(
             gh_repo=src_repo_name,
             gh_check=repo_config.check_name,
             check_types=repo_config.check_types,
+            create_mr=repo_config.create_mr,
         )
 
     # sync commits from GitHub -> GitLab
@@ -85,19 +86,19 @@ async def sync_branch(
 
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     have_shas = set(gl_refs.values())
-    from_sha = gl_refs.get(target_ref) or ("0" * 40)
+    from_sha = gl_refs.get(sync_ref) or ("0" * 40)
 
     if want_sha in have_shas:
         log.info(
-            "Target ref already up-to-date",
-            extra={"target_ref": target_ref},
+            "Destination ref already up-to-date",
+            extra={"ref": sync_ref},
         )
         return
 
     log.info(
         "Mirroring refs",
         extra={
-            "ref": target_ref,
+            "ref": sync_ref,
             "from_sha": from_sha,
             "want_sha": want_sha,
         },
@@ -115,7 +116,7 @@ async def sync_branch(
 
     await send_pack(
         dest_remote_url,
-        target_ref,
+        sync_ref,
         from_sha,
         want_sha,
         packfile,
@@ -126,7 +127,7 @@ async def sync_branch(
     log.info(
         "Successfully mirrored refs",
         extra={
-            "ref": target_ref,
+            "ref": sync_ref,
             "from_sha": from_sha,
             "want_sha": want_sha,
         },
@@ -143,7 +144,7 @@ async def remove_branch(
     **kwargs,
 ) -> None:
     src_fullname = event.data["repository"]["full_name"]
-    target_ref = event.data["ref"]
+    sync_ref = event.data["ref"]
 
     repo_config, _ = await get_repo_config(gh, src_fullname)
 
@@ -153,14 +154,14 @@ async def remove_branch(
     gl_token = await gl.auth.authenticate_user(gl_user)
 
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
-    head_sha = gl_refs.get(target_ref)
+    head_sha = gl_refs.get(sync_ref)
     null_sha = "0" * 40
 
-    log.info("Deleting ref", extra={"target_ref": target_ref})
+    log.info("Deleting ref", extra={"ref": sync_ref})
 
     await send_pack(
         dest_remote_url,
-        target_ref,
+        sync_ref,
         head_sha,
         null_sha,
         b"",
@@ -170,7 +171,7 @@ async def remove_branch(
 
     log.info(
         "Successfully deleted ref",
-        extra={"target_ref": target_ref},
+        extra={"ref": sync_ref},
     )
 
 
@@ -186,6 +187,7 @@ async def sync_pr(
     gl_user: str,
     src_repo_private: bool,
     want_sha: str,
+    default_branch: str,
 ) -> None:
     """Sync the git fork/branch referenced in a PR to GitLab.
 
@@ -202,9 +204,11 @@ async def sync_pr(
     # between multiple repositories
     is_pull_request_fork = src_fullname != base_fullname
     if is_pull_request_fork:
-        target_ref = f"refs/heads/pr-{pull_request_id}"
+        sync_branch = f"pr-{pull_request_id}"
     else:
-        target_ref = f"refs/heads/{pull_request['head']['ref']}"
+        sync_branch = pull_request["head"]["ref"]
+
+    sync_ref = f"refs/heads/{sync_branch}"
 
     if is_pull_request_fork and src_repo_private:
         # GitHub apps will not have access to private forks
@@ -235,52 +239,63 @@ async def sync_pr(
 
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     have_shas = set(gl_refs.values())
-    from_sha = gl_refs.get(target_ref) or ("0" * 40)
+    from_sha = gl_refs.get(sync_ref) or ("0" * 40)
 
     if want_sha in have_shas:
         log.info(
-            "Target ref already up-to-date",
-            extra={"target_ref": target_ref},
+            "Destination ref already up-to-date",
+            extra={"ref": sync_ref},
         )
-        return
+    else:  # needs sync
+        if is_pull_request_fork and not src_repo_private:
+            # no auth needed for public forks
+            src_creds = {}
+        else:
+            # authenticate if the PR comes from the src repository
+            src_creds = {
+                "username": gh.requester,  # the username doesn't matter, but can't be empty
+                "password": await gh.auth.authenticate_installation(
+                    gh.repo_owner, gh.repo_name
+                ),
+            }
 
-    if is_pull_request_fork and not src_repo_private:
-        # no auth needed for public forks
-        src_creds = {}
-    else:
-        # authenticate if the PR comes from the target repository
-        src_creds = {
-            "username": gh.requester,  # the username doesn't matter, but can't be empty
-            "password": await gh.auth.authenticate_installation(
-                gh.repo_owner, gh.repo_name
-            ),
-        }
+        # fetch differential packfile with all new commits
+        packfile = await fetch_pack(
+            src_repo_url,
+            want_sha,
+            have_shas,
+            **src_creds,
+        )
 
-    # fetch differential packfile with all new commits
-    packfile = await fetch_pack(
-        src_repo_url,
-        want_sha,
-        have_shas,
-        **src_creds,
-    )
+        # upload packfile to gitlab repository
+        log.info(
+            "Mirroring refs",
+            extra={
+                "from_sha": from_sha,
+                "want_sha": want_sha,
+            },
+        )
+        await send_pack(
+            dest_remote_url,
+            sync_ref,
+            from_sha,
+            want_sha,
+            packfile,
+            username=gl_user,
+            password=gl_token,
+        )
 
-    # upload packfile to gitlab repository
-    log.info(
-        "Mirroring refs",
-        extra={
-            "from_sha": from_sha,
-            "want_sha": want_sha,
-        },
-    )
-    await send_pack(
-        dest_remote_url,
-        target_ref,
-        from_sha,
-        want_sha,
-        packfile,
-        username=gl_user,
-        password=gl_token,
-    )
+    # skip already created MRs
+    if repo_config.create_mr and not await gl.get_mr(
+        dest_fullname, sync_branch, default_branch
+    ):
+        await gl.create_mr(
+            gl_fullname=dest_fullname,
+            src_branch=sync_branch,
+            target_branch=default_branch,
+            ref_title=pull_request["title"],
+            ref_url=pull_request["html_url"],
+        )
 
 
 @router.register("pull_request", action="opened")
@@ -303,7 +318,15 @@ async def sync_pr_event(
     else:
         # these events are not triggered by new commits, so we sync the head
         want_sha = pull_request["head"]["sha"]
-    await sync_pr(pull_request, gh, gl, gl_user, src_repo_private, want_sha=want_sha)
+    await sync_pr(
+        pull_request,
+        gh,
+        gl,
+        gl_user,
+        src_repo_private,
+        want_sha=want_sha,
+        default_branch=event.data["repository"]["default_branch"],
+    )
 
 
 @router.register("pull_request", action="closed")
@@ -335,20 +358,20 @@ async def remove_pr(
         return
 
     pull_request_id = pull_request["number"]
-    target_ref = f"refs/heads/pr-{pull_request_id}"
+    sync_ref = f"refs/heads/pr-{pull_request_id}"
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
     gl_token = await gl.auth.authenticate_user(gl_user)
 
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
-    head_sha = gl_refs.get(target_ref)
+    head_sha = gl_refs.get(sync_ref)
     null_sha = "0" * 40
 
-    log.info("Deleting ref", extra={"target_ref": target_ref})
+    log.info("Deleting ref", extra={"ref": sync_ref})
     await send_pack(
         dest_remote_url,
-        target_ref,
+        sync_ref,
         head_sha,
         null_sha,
         b"",
@@ -378,7 +401,13 @@ async def respond_pr_comment(
         src_repo_private = pull_request["head"]["repo"]["private"]
         # sync the approved commit explicitly
         await sync_pr(
-            pull_request, gh, gl, gl_user, src_repo_private, want_sha=commit_sha
+            pull_request,
+            gh,
+            gl,
+            gl_user,
+            src_repo_private,
+            want_sha=commit_sha,
+            default_branch=event.data["repository"]["default_branch"],
         )
         await gh.react_to_comment(event.data["review"]["node_id"], "+1")
 
