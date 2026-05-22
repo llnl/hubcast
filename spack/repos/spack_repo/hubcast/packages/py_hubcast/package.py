@@ -21,7 +21,7 @@ class PyHubcast(PythonPackage):
 
     variant("ldap", default=False, description="Enable LDAP account map support")
 
-    depends_on("python@3.10:", type=("build", "run"))
+    depends_on("python@3.11:", type=("build", "run"))
 
     depends_on("py-hatchling", type="build")
 

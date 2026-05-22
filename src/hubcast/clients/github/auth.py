@@ -1,4 +1,5 @@
 import time
+from datetime import datetime, timezone
 
 import aiohttp
 import gidgethub.apps as gha
@@ -42,9 +43,9 @@ class GitHubAuthenticator:
                     accept="application/vnd.github+json",
                     jwt=await self.get_jwt(),
                 )
-                self._id_dict[(owner, repo)] = result["id"]
+                self._id_dict[owner, repo] = result["id"]
 
-        return self._id_dict[(owner, repo)]
+        return self._id_dict[owner, repo]
 
     async def authenticate_installation(self, owner: str, repo: str) -> str:
         """
@@ -76,11 +77,13 @@ class GitHubAuthenticator:
 
         return await self._tokens.get(installation_id, renew_installation_token)
 
-    def parse_isotime(self, timestr: str) -> int:
+    @staticmethod
+    def parse_isotime(iso_string: str) -> int:
         """Convert UTC ISO 8601 time stamp to seconds in epoch"""
-        if timestr[-1] != "Z":
-            raise ValueError(f"Time String '{timestr}' not in UTC")
-        return int(time.mktime(time.strptime(timestr[:-1], "%Y-%m-%dT%H:%M:%S")))
+        dt = datetime.fromisoformat(iso_string)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
 
     async def get_jwt(self) -> str:
         """Get a JWT from cache, creating a new one if necessary."""
