@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import yaml
 
 from .abc import AccountMap
@@ -21,24 +23,25 @@ class FileMap(AccountMap):
         A filepath to the users.yml defining a usermapping.
     """
 
-    path: str
+    path: Path
     users: dict[str, str]
 
-    def __init__(self, path: str):
+    def __init__(self, path: Path | str):
         """
         Constructor, path to read from and generate a simple account
         mapping between services.
         """
-        self.path = path
+        self.path = Path(path)
 
         try:
-            with open(path, "r") as f:
-                data = yaml.safe_load(f)
-                self.users = data["Users"]
-        except FileNotFoundError:
-            raise FileMapError(f"File map not found. path={path}")
-        except yaml.YAMLError:
-            raise FileMapError(f"Failed to parse file map. path={path}")
+            data = yaml.safe_load(self.path.read_text())
+            self.users = data["Users"]
+        except FileNotFoundError as e:
+            raise FileMapError(f"File map not found. path={path}") from e
+        except yaml.YAMLError as e:
+            raise FileMapError(f"Failed to parse file map. path={path}") from e
+        except (KeyError, TypeError) as e:
+            raise FileMapError(f"File map missing Users section. path={path}") from e
 
     def __call__(self, source_user: str) -> str | None:
         """
