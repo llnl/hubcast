@@ -1,0 +1,31 @@
+name: Helm Chart Validation
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  helm-style:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Set up Helm
+        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814
+
+      - name: Lint Helm Chart
+        run: |
+          helm lint helm/
+
+      - name: Template Helm Chart (default values)
+        run: |
+          helm template hubcast helm/ > /dev/null
+
+      - name: Template Helm Chart (OpenShift)
+        run: |
+          helm template hubcast helm/ -f helm/values-openshift.yaml > /dev/null
+
+      - name: Template Helm Chart (OpenShift LDAP)
+        run: |
+          helm template hubcast helm/ -f helm/values-openshift-ldap.yaml > /dev/null

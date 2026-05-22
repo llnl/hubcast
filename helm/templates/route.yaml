@@ -1,0 +1,42 @@
+{{- define "hubcast.route" -}}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "hubcast.labels" .context | nindent 4 }}
+  {{- with .context.Values.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  host: {{ .host | quote }}
+  to:
+    kind: Service
+    name: {{ include "hubcast.fullname" .context }}
+    weight: 100
+  port:
+    targetPort: http
+  {{- if .context.Values.route.tls.enabled }}
+  tls:
+    termination: {{ .context.Values.route.tls.termination }}
+    {{- if eq .context.Values.route.tls.termination "reencrypt" }}
+    destinationCACertificate: {{ .context.Values.route.tls.destinationCACertificate | quote }}
+    {{- end }}
+    insecureEdgeTerminationPolicy: {{ .context.Values.route.tls.insecureEdgeTerminationPolicy }}
+  {{- end }}
+  wildcardPolicy: None
+{{- end -}}
+
+{{- if and .Values.route.enabled (not .Values.ingress.enabled) }}
+{{- range $index, $host := .Values.route.hosts }}
+{{- if $index }}
+---
+{{- end }}
+{{- $routeName := include "hubcast.fullname" $ }}
+{{- if $index }}
+{{- $routeName = printf "%s-alt-%d" $routeName $index }}
+{{- end }}
+{{- include "hubcast.route" (dict "name" $routeName "host" $host "context" $) }}
+{{- end }}
+{{- end }}

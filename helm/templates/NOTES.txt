@@ -1,0 +1,49 @@
+Hubcast has been deployed.
+
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+Configuration:
+  - GitHub App ID: {{ .Values.hubcast.github.appId }}
+  - GitLab URL: {{ .Values.hubcast.gitlab.url }}
+  - Account Map Type: {{ .Values.hubcast.accountMapType }}
+  {{- if eq .Values.hubcast.accountMapType "file" }}
+  - User Mappings: {{ len .Values.hubcast.accountMap.users }} configured
+  {{- end }}
+
+{{- if .Values.ingress.enabled }}
+
+Webhook Endpoints:
+{{ range $host := .Values.ingress.hosts }}
+  GitHub: http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}/v1/events/src/github
+  GitLab: http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}/v1/events/dest/gitlab
+{{- end }}
+{{- else if .Values.route.enabled }}
+
+Webhook Endpoints:
+{{ range .Values.route.hosts }}
+  GitHub: http{{ if $.Values.route.tls.enabled }}s{{ end }}://{{ . }}/v1/events/src/github
+  GitLab: http{{ if $.Values.route.tls.enabled }}s{{ end }}://{{ . }}/v1/events/dest/gitlab
+{{- end }}
+{{- else }}
+
+Health Check:
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "hubcast.fullname" . }} 8080:80
+  curl http://localhost:8080/health
+{{- end }}
+
+{{- if not .Values.existingSecret }}
+{{- if or (not .Values.secrets.githubWebhookSecret) (not .Values.secrets.githubPrivateKey) (not .Values.secrets.gitlabWebhookSecret) (not .Values.secrets.gitlabToken) }}
+
+WARNING: Secrets are not configured. Update with:
+  helm upgrade {{ .Release.Name }} . --set secrets.githubWebhookSecret="<value>" ...
+
+Or create an external secret and set existingSecret in values.
+{{- end }}
+{{- end }}
+
+Next steps:
+  1. Configure webhooks in GitHub and GitLab pointing to this instance
+  2. Verify: kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "hubcast.name" . }}
+
+Documentation: https://github.com/llnl/hubcast

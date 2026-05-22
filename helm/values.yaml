@@ -1,0 +1,177 @@
+# Default values for hubcast.
+# This is a YAML-formatted file.
+
+#------------------------------------------------------------------------------
+# Image Configuration
+#------------------------------------------------------------------------------
+image:
+  repository: ghcr.io/llnl/hubcast
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: latest
+  # Digest takes precedence over tag for immutable deployments (recommended for production)
+  # Example: sha256:abcdef123456...
+  digest: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+#------------------------------------------------------------------------------
+# Deployment Configuration
+#------------------------------------------------------------------------------
+replicaCount: 1
+
+podAnnotations: {}
+
+# For OpenShift: Set runAsUser to null to allow dynamic UID assignment
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+
+#------------------------------------------------------------------------------
+# Service & Networking
+#------------------------------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 80
+  # Targets the named container port by default, so hubcast.port can be changed independently.
+  targetPort: http
+
+# Kubernetes Ingress
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: hubcast.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: hubcast-tls
+  #    hosts:
+  #      - hubcast.example.com
+
+# OpenShift Route (alternative to Ingress)
+route:
+  enabled: false
+  # List of hosts for this route (each will get its own Route object)
+  # Example:
+  #   - hubcast.example.com
+  #   - hubcast-alt.example.com
+  hosts:
+    - hubcast.example.com
+  annotations: {}
+  tls:
+    enabled: true
+    termination: edge
+    # Required only when termination is "reencrypt"
+    destinationCACertificate: ""
+    insecureEdgeTerminationPolicy: Redirect
+
+#------------------------------------------------------------------------------
+# Resources
+#------------------------------------------------------------------------------
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+#------------------------------------------------------------------------------
+# Hubcast Application Configuration
+#------------------------------------------------------------------------------
+hubcast:
+  # Port for hubcast to listen on
+  port: 8080
+
+  # Logging configuration path (optional)
+  loggingConfigPath: ""
+
+  # Account Map Type: "file" or "ldap"
+  accountMapType: "file"
+
+  # File-based Account Map (only used when accountMapType: "file")
+  accountMap:
+    # Path where the account map will be mounted
+    path: "/config/users.yml"
+
+    # Account mapping entries. The chart renders these into users.yml under
+    # the top-level "Users" key expected by Hubcast.
+    users: {}
+
+  # LDAP-based Account Map (only used when accountMapType: "ldap")
+  ldap:
+    # LDAP server URI
+    uri: ""
+    # LDAP base DN for searches
+    base: ""
+    # LDAP attribute for input (GitHub username)
+    input: ""
+    # LDAP attribute for output (GitLab username)
+    output: ""
+    # LDAP search scope: 0=base, 1=one level, 2=subtree
+    scope: 2
+    # LDAP bind DN (optional, for authenticated binds)
+    bindDn: ""
+
+  # GitHub Settings
+  github:
+    # GitHub App Identifier (Numerical ID)
+    appId: ""
+    # Bot caller prefix (default: "/hubcast", can use "@username")
+    botUser: "/hubcast"
+
+  # GitLab Settings
+  gitlab:
+    # GitLab instance URL
+    url: "https://gitlab.com"
+    # GitLab token type: "impersonation" or "single"
+    tokenType: "impersonation"
+    # GitLab callback URL (webhook endpoint on this instance)
+    callbackUrl: ""
+
+#------------------------------------------------------------------------------
+# Secrets
+#------------------------------------------------------------------------------
+# Secrets are loaded via envFrom in the deployment.
+# Secret keys are prefixed with HC_ to match environment variable names.
+#
+# SECURITY WARNING: Do NOT commit actual secrets to version control!
+#
+# For production, use one of these approaches:
+# 1. Create secrets externally and reference via existingSecret
+# 2. Use a separate values file (e.g., secrets.yaml) that is not committed
+# 3. Use --set flags during helm install/upgrade
+# 4. Use external secret management (Sealed Secrets, Vault, etc.)
+
+secrets:
+  # GitHub App Webhook Secret
+  githubWebhookSecret: ""
+
+  # GitHub App's private key (PEM format content, not a path)
+  githubPrivateKey: ""
+
+  # GitLab Webhook Secret
+  gitlabWebhookSecret: ""
+
+  # GitLab Token
+  gitlabToken: ""
+
+  # LDAP Bind Password (optional, only needed if using LDAP with authenticated bind)
+  ldapBindPassword: ""
+
+# Existing secret name (if you want to use an existing secret instead of creating one)
+# When set, the chart will not create a secret and will use this one instead
+existingSecret: ""
