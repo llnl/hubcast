@@ -112,7 +112,9 @@ async def pipeline_status_relay(
     status = GITLAB_TO_GITHUB_STATUS.get(pipeline_status)
 
     if status:
-        await gh.set_check_status(commit, name,
+        await gh.set_check_status(
+            commit,
+            name,
             status,
             title="External pipeline run",
             summary=f"[View this pipeline on {urlparse(pipeline_url).netloc}]({pipeline_url})",
@@ -158,7 +160,8 @@ async def job_status_relay(
     status = GITLAB_TO_GITHUB_STATUS.get(job_status)
 
     if status:
-        await gh.set_check_status(commit,
+        await gh.set_check_status(
+            commit,
             name,
             status,
             title="External job run",
