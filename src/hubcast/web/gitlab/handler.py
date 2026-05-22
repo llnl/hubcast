@@ -48,7 +48,6 @@ class GitLabHandler:
                 event_type=event.event,
                 dest_repo_org=gh_repo_owner,
                 dest_repo_name=gh_repo,
-                gh_check_name=gh_check_name,
             )
 
             log.info("GitLab webhook received")
