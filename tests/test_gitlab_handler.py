@@ -23,7 +23,9 @@ def handler():
     webhook_secret = "secret"
     github_client_factory = Mock()
     github_client_factory.create_client = Mock(return_value=AsyncMock())
-    return GitLabHandler(webhook_secret, github_client_factory)
+    gitlab_client_factory = Mock()
+    gitlab_client_factory.create_client = Mock(return_value=AsyncMock())
+    return GitLabHandler(webhook_secret, github_client_factory, gitlab_client_factory)
 
 
 @pytest.fixture
@@ -78,7 +80,8 @@ async def test_handle_valid_webhook(handler, mock_request):
                     "status": "success",
                     "sha": "abc123",
                     "url": "https://gitlab.com/pipeline/123",
-                }
+                },
+                "user": {"username": "test-user"},
             },
         )
 
@@ -144,7 +147,11 @@ async def test_handle_query_params(handler, mock_request):
 
         # just a basic event
         mock_event.return_value = Mock(
-            event="Pipeline Hook", data={"object_attributes": {"status": "success"}}
+            event="Pipeline Hook",
+            data={
+                "object_attributes": {"status": "success"},
+                "user": {"username": "test-user"},
+            },
         )
 
         response = await handler.handle(mock_request)

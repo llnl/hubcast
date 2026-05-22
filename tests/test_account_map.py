@@ -56,10 +56,7 @@ def test_file_map_missing_users_key():
     try:
         FileMap(file_path)
     except FileMapError as e:
-        assert (
-            str(e)
-            == f"Failed to parse file map. 'Users' key not found. path={file_path}"
-        )
+        assert str(e) == f"File map missing Users section. path={file_path}"
 
 
 # ldap mapper tests

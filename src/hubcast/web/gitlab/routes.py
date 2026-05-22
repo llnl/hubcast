@@ -61,7 +61,7 @@ async def pipeline_status_relay(
     check_types: list,
     *args,
     **kwargs,
-) -> str:
+) -> str | None:
     """Relay status of a GitLab pipeline back to GitHub."""
 
     pipeline_status = event.data["object_attributes"]["status"]
@@ -120,7 +120,7 @@ async def job_status_relay(
     check_types: list,
     *args,
     **kwargs,
-) -> None:
+) -> str | None:
     """Relay status of a GitLab job back to GitHub."""
     job_status = event.data["build_status"]
     status = GITLAB_TO_GITHUB_STATUS.get(job_status)

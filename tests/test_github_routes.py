@@ -50,6 +50,10 @@ def mock_pr_event():
     """Mocked pull request creation/update."""
     event = Mock()
     event.data = {
+        "repository": {
+            "full_name": "owner/repo",
+            "default_branch": "main",
+        },
         "pull_request": {
             "number": 123,
             "draft": False,
@@ -102,6 +106,10 @@ def mock_review_event(mock_pr_data_for_comment):
     """Mocked pull request review."""
     event = Mock()
     event.data = {
+        "repository": {
+            "full_name": "owner/repo",
+            "default_branch": "main",
+        },
         "review": {
             "node_id": 789,
             "body": "@hubcast-bot approve",
