@@ -13,4 +13,3 @@ class AccountMap(ABC):
         Return the corresponding destination forge user for a given source forge user
         if one exists.
         """
-        pass

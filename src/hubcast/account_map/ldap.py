@@ -135,4 +135,4 @@ class LDAPMap(AccountMap):
                 f"LDAP query failed: {e}",
                 base=self.search_base,
                 filterstr=filterstr,
-            )
+            ) from e

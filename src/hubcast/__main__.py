@@ -72,8 +72,8 @@ def initialize_account_map(conf: Config) -> AccountMap:
         case FileAccountMapConfig(path=path):
             try:
                 return FileMap(path)
-            except FileMapError:
-                log.exception("Error initializing file account map")
+            except FileMapError as e:
+                e.log(log)
                 sys.exit(1)
 
         case LDAPAccountMapConfig() as ldap_config:
