@@ -2,10 +2,12 @@ from pathlib import Path
 
 import yaml
 
+from hubcast.exceptions import HubcastError
+
 from .abc import AccountMap
 
 
-class FileMapError(Exception):
+class FileMapError(HubcastError):
     pass
 
 
