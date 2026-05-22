@@ -51,6 +51,11 @@ jobs:
             helm:
               - '.github/**/*'
               - 'helm/**/*'
+            unit-tests:
+              - '.github/**/*'
+              - 'src/**/*'
+              - 'tests/**/*'
+              - 'pyproject.toml'
 
   style:
     if: needs.changes.outputs.style == 'true'
@@ -96,7 +101,7 @@ jobs:
      - style
      - style-helm
      - security
-     # - unit-tests
+     - unit-tests
      # - coverage
      - container
     if: always()
