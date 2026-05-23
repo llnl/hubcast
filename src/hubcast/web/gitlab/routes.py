@@ -17,7 +17,7 @@ GITLAB_TO_GITHUB_STATUS = {
     "pending": "queued",
     "running": "in_progress",
     "failed": "failure",
-    "canceled": "cancelled",
+    "canceled": "cancelled",  # Not a typo, GitHub with two Ls
     "skipped": "skipped",
     "success": "success",
 }
@@ -54,40 +54,32 @@ async def pipeline_status_relay(
     gh: GitHubClient,
     gl: GitLabClient,
     gh_check_name: str,
-    create_mr: bool,
     *args,
     **kwargs,
 ) -> None:
     """Relay status of a GitLab pipeline back to GitHub."""
+
     pipeline_status = event.data["object_attributes"]["status"]
     status = GITLAB_TO_GITHUB_STATUS.get(pipeline_status)
     if not status:
         return
 
-    sha = event.data["object_attributes"]["sha"]
     project = event.data["project"]["path_with_namespace"]
+    ref = event.data["object_attributes"].get("ref", "")
+    sha = event.data["object_attributes"]["sha"]
 
-    if not event.data.get("merge_request"):
-        commit, pipeline_type = sha, "non-mr-branch"
-    else:
-        # to distinguish between the MR pipelines, we need to fetch the pipeline details
-        # and check the ref's suffix
-        pipeline_info = await gl.get_pipeline(
-            project, event.data["object_attributes"]["id"]
-        )
+    if event.data.get("merge_request") and ref.endswith("/merge"):
+        # MR merge pipelines use a synthetic merge commit, so report the source
+        # commit status back to GitHub instead.
+        commit_info = await gl.get_commit(project, sha)
+        sha = commit_info["parent_ids"][1]
 
-        if pipeline_info["ref"].endswith("/head"):
-            commit, pipeline_type = sha, "branch"
-        elif pipeline_info["ref"].endswith("/merge"):
-            # API call to extract source HEAD
-            commit_info = await gl.get_commit(project, sha)
-            commit, pipeline_type = commit_info["parent_ids"][1], "merge request"
+    name = gh_check_name
 
-    name = f"{gh_check_name} [{pipeline_type}]" if create_mr else gh_check_name
     pipeline_url = event.data["object_attributes"]["url"]
 
     await gh.set_check_status(
-        commit,
+        sha,
         name,
         status,
         title="External pipeline run",
@@ -102,7 +94,6 @@ async def job_status_relay(
     gh: GitHubClient,
     gl: GitLabClient,
     gh_check_name: str,
-    create_mr: bool,
     *args,
     **kwargs,
 ) -> None:
@@ -112,19 +103,15 @@ async def job_status_relay(
     if not status:
         return
 
-    sha = event.data["sha"]
     project = event.data["project"]["path_with_namespace"]
     ref = event.data.get("ref", "")
-    is_mr_event = ref.startswith("refs/merge-requests/")
+    sha = event.data["sha"]
 
-    if not is_mr_event:
-        commit, pipeline_type = sha, "non-mr-branch"
-    elif ref.endswith("/head"):
-        commit, pipeline_type = sha, "branch"
-    elif ref.endswith("/merge"):
-        # API call to extract source HEAD
+    if ref.startswith("refs/merge-requests/") and ref.endswith("/merge"):
+        # MR merge jobs use a synthetic merge commit, so report the source
+        # commit status back to GitHub instead.
         commit_info = await gl.get_commit(project, sha)
-        commit, pipeline_type = commit_info["parent_ids"][1], "merge request"
+        sha = commit_info["parent_ids"][1]
 
     job_id = event.data["build_id"]
     job_name = event.data["build_name"]
@@ -133,10 +120,9 @@ async def job_status_relay(
     job_url = f"{repository_url}/-/jobs/{job_id}"
 
     name = f"{gh_check_name} / {job_name}" if gh_check_name else job_name
-    name = f"{name} [{pipeline_type}]" if create_mr else name
 
     await gh.set_check_status(
-        commit,
+        sha,
         name,
         status,
         title="External job run",
