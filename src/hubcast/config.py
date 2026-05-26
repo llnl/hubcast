@@ -1,4 +1,4 @@
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -88,7 +88,7 @@ class LDAPAccountMapConfig(BaseModel):
 
 
 AccountMapConfig = Annotated[
-    Union[FileAccountMapConfig, LDAPAccountMapConfig],
+    FileAccountMapConfig | LDAPAccountMapConfig,
     Field(discriminator="type"),
 ]
 

@@ -43,7 +43,6 @@ class GitLabHandler:
             gh_repo_owner = routing_token.gh_owner
             gh_repo = routing_token.gh_repo
             gh_check_name = routing_token.gh_check
-            create_mr = routing_token.create_mr
 
             body = await request.read()
 
@@ -68,9 +67,7 @@ class GitLabHandler:
             gitlab_client = self.gitlab_client_factory.create_client(gl_user)
             await spawn(
                 request,
-                router.dispatch(
-                    event, github_client, gitlab_client, gh_check_name, create_mr
-                ),
+                router.dispatch(event, github_client, gitlab_client, gh_check_name),
             )
 
             # return a "Success"

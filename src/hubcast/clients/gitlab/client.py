@@ -139,7 +139,6 @@ class GitLabClient:
         gh_repo: str,
         gh_check: str,
         check_types: list[Literal["pipeline", "jobs"]],
-        create_mr: bool,
     ) -> None:
         gl_token = await self.auth.authenticate_user(username=self.user)
         gl_fullname = f"{dest_org}/{dest_repo}"
@@ -149,7 +148,6 @@ class GitLabClient:
             gh_owner=gh_owner,
             gh_repo=gh_repo,
             gh_check=gh_check,
-            create_mr=create_mr,
         )
         token = routing_token.encode(self.webhook_secret)
 
