@@ -61,7 +61,6 @@ def mock_routing_token():
     token.gh_owner = "owner"
     token.gh_repo = "repo"
     token.gh_check = "gitlab-ci"
-    token.create_mr = False
     return token
 
 

@@ -11,7 +11,6 @@ def token_data():
         "gh_owner": "owner",
         "gh_repo": "repo",
         "gh_check": "gitlab-ci",
-        "create_mr": False,
     }
 
 
@@ -31,7 +30,6 @@ class TestRoutingToken:
         assert decoded.gh_owner == token_data["gh_owner"]
         assert decoded.gh_repo == token_data["gh_repo"]
         assert decoded.gh_check == token_data["gh_check"]
-        assert decoded.create_mr == token_data["create_mr"]
 
     def test_decode_invalid_signature(self, token_data, secret):
         """Should raise RoutingTokenError for invalid signature."""
@@ -68,15 +66,16 @@ class TestRoutingToken:
         with pytest.raises(Exception):
             token.gh_owner = "new-owner"
 
-    def test_encode_with_create_mr(self, secret):
-        """Should handle create_mr flag correctly."""
+    def test_encode_basic_fields(self, secret):
+        """Should encode and decode all basic fields correctly."""
         token = RoutingToken(
             gh_owner="owner",
             gh_repo="repo",
             gh_check="gitlab-ci",
-            create_mr=True,
         )
         encoded = token.encode(secret)
         decoded = RoutingToken.decode(secret, encoded)
 
-        assert decoded.create_mr is True
+        assert decoded.gh_owner == "owner"
+        assert decoded.gh_repo == "repo"
+        assert decoded.gh_check == "gitlab-ci"

@@ -87,7 +87,7 @@ async def test_pipeline_status_mapping(
     base_pipeline_event["object_attributes"]["status"] = gitlab_status
     event = make_event(base_pipeline_event)
 
-    result = await pipeline_status_relay(event, mock_gh, mock_gl, "ci", create_mr=False)
+    result = await pipeline_status_relay(event, mock_gh, mock_gl, "ci")
 
     assert result == github_status
     commit, name, status = mock_gh.set_check_status.call_args[0][:3]
@@ -98,18 +98,17 @@ async def test_pipeline_status_mapping(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "merge_request,ref_suffix,expected_commit,expected_type",
+    "merge_request,ref_suffix,expected_commit",
     [
-        (None, None, "test-sha", "non-mr-branch"),
-        ({"id": 1}, "/head", "test-sha", "branch"),
-        ({"id": 1}, "/merge", "source", "merge request"),
+        (None, None, "test-sha"),
+        ({"id": 1}, "/head", "test-sha"),
+        ({"id": 1}, "/merge", "source"),
     ],
 )
 async def test_pipeline_commit_resolution(
     merge_request,
     ref_suffix,
     expected_commit,
-    expected_type,
     base_pipeline_event,
     mock_gh,
     mock_gl,
@@ -122,34 +121,34 @@ async def test_pipeline_commit_resolution(
         }
 
     event = make_event(base_pipeline_event)
-    await pipeline_status_relay(event, mock_gh, mock_gl, "ci", create_mr=True)
+    await pipeline_status_relay(event, mock_gh, mock_gl, "ci")
 
     commit, name, _ = mock_gh.set_check_status.call_args[0][:3]
     assert commit == expected_commit
-    assert name == f"ci [{expected_type}]"
+    assert name == "ci"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "ref,expected_commit,expected_suffix",
+    "ref,expected_commit",
     [
-        ("refs/heads/main", "test-sha", " [non-mr-branch]"),
-        ("refs/merge-requests/1/head", "test-sha", " [branch]"),
-        ("refs/merge-requests/1/merge", "source", " [merge request]"),
+        ("refs/heads/main", "test-sha"),
+        ("refs/merge-requests/1/head", "test-sha"),
+        ("refs/merge-requests/1/merge", "source"),
     ],
 )
 async def test_job_commit_resolution(
-    ref, expected_commit, expected_suffix, base_job_event, mock_gh, mock_gl
+    ref, expected_commit, base_job_event, mock_gh, mock_gl
 ):
     """Should resolve correct commit SHA for different job types."""
     base_job_event["ref"] = ref
     event = make_event(base_job_event)
 
-    await job_status_relay(event, mock_gh, mock_gl, "ci", create_mr=True)
+    await job_status_relay(event, mock_gh, mock_gl, "ci")
 
     commit, name, _ = mock_gh.set_check_status.call_args[0][:3]
     assert commit == expected_commit
-    assert name == f"ci / test-job{expected_suffix}"
+    assert name == "ci / test-job"
 
 
 @pytest.mark.asyncio
