@@ -61,6 +61,11 @@ async def pipeline_status_relay(
     **kwargs,
 ) -> None:
     """Relay status of a GitLab pipeline back to GitHub."""
+    pipeline_status = event.data["object_attributes"]["status"]
+    status = GITLAB_TO_GITHUB_STATUS.get(pipeline_status)
+    if not status:
+        return
+
     sha = event.data["object_attributes"]["sha"]
     project = event.data["project"]["path_with_namespace"]
 
@@ -81,22 +86,16 @@ async def pipeline_status_relay(
             commit, pipeline_type = commit_info["parent_ids"][1], "merge request"
 
     name = f"{gh_check_name} [{pipeline_type}]" if create_mr else gh_check_name
-
-    # get status from event
-    pipeline_status = event.data["object_attributes"]["status"]
     pipeline_url = event.data["object_attributes"]["url"]
 
-    status = GITLAB_TO_GITHUB_STATUS.get(pipeline_status)
-
-    if status:
-        await gh.set_check_status(
-            commit,
-            name,
-            status,
-            title="External pipeline run",
-            summary=f"[View this pipeline on {urlparse(pipeline_url).netloc}]({pipeline_url})",
-            details_url=pipeline_url,
-        )
+    await gh.set_check_status(
+        commit,
+        name,
+        status,
+        title="External pipeline run",
+        summary=f"[View this pipeline on {urlparse(pipeline_url).netloc}]({pipeline_url})",
+        details_url=pipeline_url,
+    )
 
 
 @router.register("Job Hook")
@@ -110,6 +109,11 @@ async def job_status_relay(
     **kwargs,
 ) -> None:
     """Relay status of a GitLab job back to GitHub."""
+    job_status = event.data["build_status"]
+    status = GITLAB_TO_GITHUB_STATUS.get(job_status)
+    if not status:
+        return
+
     sha = event.data["sha"]
     project = event.data["project"]["path_with_namespace"]
     ref = event.data.get("ref", "")
@@ -126,7 +130,6 @@ async def job_status_relay(
 
     job_id = event.data["build_id"]
     job_name = event.data["build_name"]
-    job_status = event.data["build_status"]
 
     repository_url = event.data["project"]["web_url"]
     job_url = f"{repository_url}/-/jobs/{job_id}"
@@ -134,14 +137,11 @@ async def job_status_relay(
     name = f"{gh_check_name} / {job_name}" if gh_check_name else job_name
     name = f"{name} [{pipeline_type}]" if create_mr else name
 
-    status = GITLAB_TO_GITHUB_STATUS.get(job_status)
-
-    if status:
-        await gh.set_check_status(
-            commit,
-            name,
-            status,
-            title="External job run",
-            summary=f"[View this job on {urlparse(job_url).netloc}]({job_url})",
-            details_url=job_url,
-        )
+    await gh.set_check_status(
+        commit,
+        name,
+        status,
+        title="External job run",
+        summary=f"[View this job on {urlparse(job_url).netloc}]({job_url})",
+        details_url=job_url,
+    )
