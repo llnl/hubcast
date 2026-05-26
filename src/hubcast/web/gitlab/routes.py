@@ -14,9 +14,7 @@ log = logging.getLogger(__name__)
 # https://docs.gitlab.com/api/pipelines/#list-project-pipelines -> status description
 # not mapping all statuses to avoid churn in posting updates
 GITLAB_TO_GITHUB_STATUS = {
-    "created": "queued",
     "pending": "queued",
-    "manual": "queued",
     "running": "in_progress",
     "failed": "failure",
     "canceled": "cancelled",
