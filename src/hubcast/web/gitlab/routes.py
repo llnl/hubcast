@@ -79,12 +79,11 @@ async def pipeline_status_relay(
             commit_info = await gl.get_commit(project, sha)
             sha = commit_info["parent_ids"][1]
 
-    name = gh_check_name
     pipeline_url = event.data["object_attributes"]["url"]
 
     await gh.set_check_status(
         sha,
-        name,
+        gh_check_name,
         status,
         title="External pipeline run",
         summary=f"[View this pipeline on {urlparse(pipeline_url).netloc}]({pipeline_url})",
