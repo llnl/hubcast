@@ -65,17 +65,21 @@ async def pipeline_status_relay(
         return
 
     project = event.data["project"]["path_with_namespace"]
-    ref = event.data["object_attributes"].get("ref", "")
+    pipeline_id = event.data["object_attributes"]["id"]
     sha = event.data["object_attributes"]["sha"]
 
-    if event.data.get("merge_request") and ref.endswith("/merge"):
-        # MR merge pipelines use a synthetic merge commit, so report the source
-        # commit status back to GitHub instead.
-        commit_info = await gl.get_commit(project, sha)
-        sha = commit_info["parent_ids"][1]
+    if event.data.get("merge_request"):
+        # Fetch the pipeline from the API to get the correct ref (which may include /merge suffix)
+        pipeline = await gl.get_pipeline(project, pipeline_id)
+        ref = pipeline.get("ref", "")
+
+        if ref.endswith("/merge"):
+            # MR merge pipelines use a synthetic merge commit, so report the source
+            # commit status back to GitHub instead.
+            commit_info = await gl.get_commit(project, sha)
+            sha = commit_info["parent_ids"][1]
 
     name = gh_check_name
-
     pipeline_url = event.data["object_attributes"]["url"]
 
     await gh.set_check_status(
