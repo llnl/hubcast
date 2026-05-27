@@ -147,7 +147,7 @@ async def remove_branch(
     gl_user: str,
     *arg,
     **kwargs,
-) -> dict[str, str]:
+) -> None:
     src_fullname = event.data["repository"]["full_name"]
     sync_ref = event.data["ref"]
 
@@ -162,7 +162,11 @@ async def remove_branch(
     head_sha = gl_refs.get(sync_ref)
 
     if head_sha is None:
-        return {"action": "skipped", "reason": "ref_not_found"}
+        log.info(
+            "Skipped branch removal - ref not found",
+            extra={"action": "skipped", "reason": "ref_not_found", "ref": sync_ref},
+        )
+        return
 
     null_sha = "0" * 40
 
@@ -180,10 +184,8 @@ async def remove_branch(
 
     log.info(
         "Successfully deleted ref",
-        extra={"ref": sync_ref},
+        extra={"action": "deleted", "ref": sync_ref},
     )
-
-    return {"action": "deleted"}
 
 
 # -----------------------------------

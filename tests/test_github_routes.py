@@ -369,24 +369,26 @@ async def test_sync_branch_synced(mock_push_event, mock_gh, mock_gl, mock_replig
 
 @pytest.mark.asyncio
 async def test_remove_branch_skip_no_ref(
-    mock_delete_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_delete_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """Branch removal should be skipped if the ref cannot be found on the destination."""
 
     # ls_remote returns some other refs, not the one being deleted
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "some-sha"}
 
-    result = await remove_branch(
-        event=mock_delete_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
+    with caplog.at_level("INFO", logger="hubcast.web.github.routes"):
+        await remove_branch(
+            event=mock_delete_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+        )
 
-    assert result["action"] == "skipped"
-    assert result["reason"] == "ref_not_found"
+    record = caplog.records[-1]
+    assert record.action == "skipped"
+    assert record.reason == "ref_not_found"
 
 
 @pytest.mark.asyncio
 async def test_remove_branch_deleted(
-    mock_delete_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_delete_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """Branch removal should proceed if the ref exists."""
 
@@ -395,11 +397,13 @@ async def test_remove_branch_deleted(
         "refs/heads/feature-branch": "branch-sha-123",
     }
 
-    result = await remove_branch(
-        event=mock_delete_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
+    with caplog.at_level("INFO", logger="hubcast.web.github.routes"):
+        await remove_branch(
+            event=mock_delete_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+        )
 
-    assert result["action"] == "deleted"
+    record = caplog.records[-1]
+    assert record.action == "deleted"
 
 
 # Tests for sync_pr_event
