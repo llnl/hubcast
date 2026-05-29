@@ -309,24 +309,23 @@ async def test_github_dispatch_logs_hubcast_errors():
 
 @pytest.mark.asyncio
 async def test_sync_branch_skip_open_pr(
-    mock_push_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_push_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """Branches should not be synced if there is an open PR for the branch."""
 
     # mocking hubcast.clients.github.client.GitHubClient.get_prs
     mock_gh.get_prs.return_value = [123]  # Simulate an open PR exists
 
-    result = await sync_branch(
+    await sync_branch(
         event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "skipped"
-    assert result["reason"] == "branch_has_open_pr"
+    assert "Skipped branch sync - branch has open PR" in caplog.text
 
 
 @pytest.mark.asyncio
 async def test_sync_branch_skip_up_to_date(
-    mock_push_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_push_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """Branches should not be synced if already up to date."""
 
@@ -339,16 +338,15 @@ async def test_sync_branch_skip_up_to_date(
         "refs/heads/main": "sha-123",  # Same as event's head_commit.id
     }
 
-    result = await sync_branch(
+    await sync_branch(
         event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "skipped"
-    assert result["reason"] == "up_to_date"
+    assert "Skipped branch sync - already up-to-date" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_sync_branch_synced(mock_push_event, mock_gh, mock_gl, mock_repligit_ops):
+async def test_sync_branch_synced(mock_push_event, mock_gh, mock_gl, mock_repligit_ops, caplog):
     """Branches should sync if all conditions are met."""
 
     # no open PRs for the branch
@@ -357,11 +355,11 @@ async def test_sync_branch_synced(mock_push_event, mock_gh, mock_gl, mock_replig
     # mock ls_remote returning refs that do NOT contain the want_sha
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha-456"}
 
-    result = await sync_branch(
+    await sync_branch(
         event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "synced"
+    assert "Synced branch" in caplog.text
 
 
 # Tests for remove_branch
@@ -376,14 +374,11 @@ async def test_remove_branch_skip_no_ref(
     # ls_remote returns some other refs, not the one being deleted
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "some-sha"}
 
-    with caplog.at_level("INFO", logger="hubcast.web.github.routes"):
-        await remove_branch(
-            event=mock_delete_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-        )
+    await remove_branch(
+        event=mock_delete_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+    )
 
-    record = caplog.records[-1]
-    assert record.action == "skipped"
-    assert record.reason == "ref_not_found"
+    assert "Skipped branch removal - ref not found" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -397,13 +392,11 @@ async def test_remove_branch_deleted(
         "refs/heads/feature-branch": "branch-sha-123",
     }
 
-    with caplog.at_level("INFO", logger="hubcast.web.github.routes"):
-        await remove_branch(
-            event=mock_delete_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-        )
+    await remove_branch(
+        event=mock_delete_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+    )
 
-    record = caplog.records[-1]
-    assert record.action == "deleted"
+    assert "Deleted branch" in caplog.text
 
 
 # Tests for sync_pr_event
@@ -411,22 +404,21 @@ async def test_remove_branch_deleted(
 
 @pytest.mark.asyncio
 async def test_sync_pr_skip_private_fork(
-    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """PR sync should be skipped for private forks."""
 
     mock_pr_event.data["pull_request"]["head"]["repo"]["private"] = True
 
-    result = await sync_pr_event(
+    await sync_pr_event(
         event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "skipped"
-    assert result["reason"] == "private_fork"
+    assert "Skipped PR sync - private fork" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_sync_pr_skip_draft(mock_pr_event, mock_gh, mock_gl, mock_repligit_ops):
+async def test_sync_pr_skip_draft(mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog):
     """PR sync should be skipped for draft PRs (when sync_drafts is False)."""
 
     mock_pr_event.data["pull_request"]["draft"] = True
@@ -435,46 +427,44 @@ async def test_sync_pr_skip_draft(mock_pr_event, mock_gh, mock_gl, mock_repligit
         True,
     )
 
-    result = await sync_pr_event(
+    await sync_pr_event(
         event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "skipped"
-    assert result["reason"] == "draft_pr"
+    assert "Skipped PR sync - draft PR" in caplog.text
 
 
 @pytest.mark.asyncio
 async def test_sync_pr_skip_up_to_date(
-    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """PR sync should be skipped if already up to date."""
 
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/pr-123": "pr-sha-123"}
 
-    result = await sync_pr_event(
+    await sync_pr_event(
         event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
-    assert result["action"] == "skipped"
-    assert result["reason"] == "up_to_date"
+    assert "Skipped PR sync - already up-to-date" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_sync_pr_synced_fork(mock_pr_event, mock_gh, mock_gl, mock_repligit_ops):
+async def test_sync_pr_synced_fork(mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog):
     """PR sync should proceed if all conditions are met (from fork)."""
 
     # ls_remote does not have the PR branch sha
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
 
-    result = await sync_pr_event(
+    await sync_pr_event(
         event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "synced"
+    assert "Synced PR" in caplog.text
 
 
 @pytest.mark.asyncio
 async def test_sync_pr_synced_internal(
-    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """PR sync should proceed if all conditions are met (internal branch)."""
 
@@ -484,16 +474,16 @@ async def test_sync_pr_synced_internal(
 
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
 
-    result = await sync_pr_event(
+    await sync_pr_event(
         event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "synced"
+    assert "Synced PR" in caplog.text
 
 
 @pytest.mark.asyncio
 async def test_sync_pr_opened_uses_head_sha(
-    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """PR opened event should use head sha instead of after field."""
 
@@ -503,17 +493,21 @@ async def test_sync_pr_opened_uses_head_sha(
 
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
 
-    result = await sync_pr_event(
+    await sync_pr_event(
         event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "synced"
-    assert result["sha"] == "head-sha-456"
+    assert "Synced PR" in caplog.text
+    # Verify the sha was logged in the extra fields
+    assert any(
+        hasattr(record, "sha") and record.sha == "head-sha-456"
+        for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio
 async def test_sync_pr_creates_mr_when_configured(
-    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """Should create MR on GitLab when create_mr config is enabled and MR doesn't exist."""
 
@@ -537,18 +531,18 @@ async def test_sync_pr_creates_mr_when_configured(
     mock_gl.get_mr = AsyncMock(return_value=None)  # No MR exists yet
     mock_gl.create_mr = AsyncMock()
 
-    result = await sync_pr_event(
+    await sync_pr_event(
         event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "synced"
-    assert result["mr_created"] is True
+    assert "Synced PR" in caplog.text
+    assert "Created MR" in caplog.text
     mock_gl.create_mr.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_sync_pr_skips_mr_when_already_exists(
-    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """Should skip MR creation when MR already exists."""
 
@@ -566,12 +560,12 @@ async def test_sync_pr_skips_mr_when_already_exists(
     mock_gl.get_mr = AsyncMock(return_value={"id": 42})  # MR already exists
     mock_gl.create_mr = AsyncMock()
 
-    result = await sync_pr_event(
+    await sync_pr_event(
         event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "synced"
-    assert "mr_created" not in result
+    assert "Synced PR" in caplog.text
+    assert "Created MR" not in caplog.text
     mock_gl.create_mr.assert_not_called()
 
 
@@ -580,7 +574,7 @@ async def test_sync_pr_skips_mr_when_already_exists(
 
 @pytest.mark.asyncio
 async def test_remove_pr_skip_delete_closed_false(
-    mock_pr_closed_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_pr_closed_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """PR branch removal should be skipped when delete_closed=False (PR 280)."""
 
@@ -590,17 +584,16 @@ async def test_remove_pr_skip_delete_closed_false(
         True,
     )
 
-    result = await remove_pr(
+    await remove_pr(
         event=mock_pr_closed_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "skipped"
-    assert result["reason"] == "delete_closed_disabled"
+    assert "Skipped PR branch removal - delete_closed disabled" in caplog.text
 
 
 @pytest.mark.asyncio
 async def test_remove_pr_skip_internal(
-    mock_pr_closed_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_pr_closed_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """PR branch removal should be skipped for internal branches."""
 
@@ -609,34 +602,32 @@ async def test_remove_pr_skip_internal(
         "owner/repo"
     )
 
-    result = await remove_pr(
+    await remove_pr(
         event=mock_pr_closed_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "skipped"
-    assert result["reason"] == "internal_branch"
+    assert "Skipped PR branch removal - internal branch" in caplog.text
 
 
 @pytest.mark.asyncio
 async def test_remote_pr_skip_no_ref(
-    mock_pr_closed_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_pr_closed_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """PR branch removal should be skipped if the ref cannot be found on the destination."""
 
     # ls_remote doesn't have the pr branch
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "some-sha"}
 
-    result = await remove_pr(
+    await remove_pr(
         event=mock_pr_closed_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "skipped"
-    assert result["reason"] == "ref_not_found"
+    assert "Skipped PR branch removal - ref not found" in caplog.text
 
 
 @pytest.mark.asyncio
 async def test_remove_pr_deleted(
-    mock_pr_closed_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_pr_closed_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """PR branch removal should proceed if the ref exists."""
 
@@ -645,11 +636,11 @@ async def test_remove_pr_deleted(
         "refs/heads/pr-123": "pr-sha-123",
     }
 
-    result = await remove_pr(
+    await remove_pr(
         event=mock_pr_closed_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "deleted"
+    assert "Deleted PR branch" in caplog.text
 
 
 # Tests for respond_comment
@@ -657,62 +648,58 @@ async def test_remove_pr_deleted(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "command,expected_action,expected_reason,is_pr",
+    "command,expected_log,is_pr",
     [
-        ("@hubcast-bot help", "help_sent", None, True),
-        ("@hubcast-bot approve", "approval_reminder_sent", None, True),
-        ("random text", "skipped", "no_command_matched", True),
-        ("@hubcast-bot help", "skipped", "not_pr_comment", False),  # issue comment
+        ("@hubcast-bot help", "Help message sent", True),
+        ("@hubcast-bot approve", "Approval reminder sent", True),
+        ("random text", "Skipped comment - no command matched", True),
+        ("@hubcast-bot help", "Skipped comment - not PR comment", False),  # issue comment
     ],
 )
 async def test_respond_comment_simple_commands(
     command,
-    expected_action,
-    expected_reason,
+    expected_log,
     is_pr,
     mock_comment_event,
     mock_repligit_ops,
     call_respond_comment,
+    caplog,
 ):
     """Should handle simple commands (help, approve, unmatched) and non-PR comments."""
     if not is_pr:
         del mock_comment_event.data["issue"]["pull_request"]
 
-    result = await call_respond_comment(command)
+    await call_respond_comment(command)
 
-    assert result["action"] == expected_action
-    if expected_reason:
-        assert result["reason"] == expected_reason
+    assert expected_log in caplog.text
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "command,expected_action,expected_reason,needs_pr_setup",
+    "command,expected_log,needs_pr_setup",
     [
-        ("@hubcast-bot approve", "approve_sent", None, True),
-        ("Looks good to me!", "skipped", "no_command_matched", False),
+        ("@hubcast-bot approve", "Approval sent", True),
+        ("Looks good to me!", "Skipped PR review comment - no command matched", False),
     ],
 )
 async def test_respond_pr_comment_commands(
     command,
-    expected_action,
-    expected_reason,
+    expected_log,
     needs_pr_setup,
     mock_gh,
     mock_repligit_ops,
     mock_pr_data_for_comment,
     call_respond_pr_comment,
+    caplog,
 ):
     """Should handle PR review comments (approve or no command)."""
     if needs_pr_setup:
         mock_gh.get_pr = AsyncMock(return_value=mock_pr_data_for_comment)
         mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
 
-    result = await call_respond_pr_comment(command)
+    await call_respond_pr_comment(command)
 
-    assert result["action"] == expected_action
-    if expected_reason:
-        assert result["reason"] == expected_reason
+    assert expected_log in caplog.text
 
 
 @pytest.mark.asyncio
@@ -734,6 +721,7 @@ async def test_respond_comment_run_pipeline(
     mock_gl,
     mock_repligit_ops,
     mock_pr_data_for_comment,
+    caplog,
 ):
     """Should handle all variations of run/start pipeline command."""
     mock_comment_event.data["comment"]["body"] = command
@@ -741,26 +729,26 @@ async def test_respond_comment_run_pipeline(
     mock_gl.run_pipeline = AsyncMock(return_value="https://gitlab.com/pipeline/123")
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
 
-    result = await respond_comment(
+    await respond_comment(
         event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "pipeline_started"
+    assert "Pipeline started for branch" in caplog.text
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "is_internal,run_success,expected_action,expected_branch",
+    "is_internal,run_success,expected_log,expected_branch",
     [
-        (True, True, "pipeline_started", "feature-branch"),  # internal PR success
-        (False, True, "pipeline_started", "pr-123"),  # fork PR success
-        (True, False, "pipeline_failed", "feature-branch"),  # internal PR failed
+        (True, True, "Pipeline started for branch", "feature-branch"),  # internal PR success
+        (False, True, "Pipeline started for branch", "pr-123"),  # fork PR success
+        (True, False, "Pipeline failed to start for branch", "feature-branch"),  # internal PR failed
     ],
 )
 async def test_respond_comment_run_pipeline_variations(
     is_internal,
     run_success,
-    expected_action,
+    expected_log,
     expected_branch,
     mock_comment_event,
     mock_gh,
@@ -768,6 +756,7 @@ async def test_respond_comment_run_pipeline_variations(
     mock_pr_data_for_comment,
     setup_pr_mocks,
     setup_pipeline_mocks,
+    caplog,
 ):
     """Should handle pipeline start for internal/fork PRs and success/failure."""
     mock_comment_event.data["comment"]["body"] = "@hubcast-bot run pipeline"
@@ -780,12 +769,15 @@ async def test_respond_comment_run_pipeline_variations(
     setup_pr_mocks(mock_pr_data_for_comment)
     setup_pipeline_mocks(run_success=run_success)
 
-    result = await respond_comment(
+    await respond_comment(
         event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == expected_action
-    assert result["branch"] == expected_branch
+    assert expected_log in caplog.text
+    assert any(
+        hasattr(record, "branch") and record.branch == expected_branch
+        for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio
@@ -805,6 +797,7 @@ async def test_respond_comment_restart_jobs(
     mock_gl,
     mock_repligit_ops,
     mock_pr_data_for_comment,
+    caplog,
 ):
     """Should restart failed jobs."""
 
@@ -815,28 +808,28 @@ async def test_respond_comment_restart_jobs(
         return_value="https://gitlab.com/pipeline/789"
     )
 
-    result = await respond_comment(
+    await respond_comment(
         event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "jobs_restarted"
+    assert "Jobs restarted for branch" in caplog.text
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "is_internal,pipeline_exists,retry_success,expected_action,expected_branch",
+    "is_internal,pipeline_exists,retry_success,expected_log,expected_branch",
     [
-        (True, True, True, "jobs_restarted", "feature-branch"),  # internal success
-        (False, True, True, "jobs_restarted", "pr-123"),  # fork success
-        (True, True, False, "jobs_restart_failed", "feature-branch"),  # retry failed
-        (True, False, False, "no_pipeline", "feature-branch"),  # no pipeline
+        (True, True, True, "Jobs restarted for branch", "feature-branch"),  # internal success
+        (False, True, True, "Jobs restarted for branch", "pr-123"),  # fork success
+        (True, True, False, "Jobs restart failed for branch", "feature-branch"),  # retry failed
+        (True, False, False, "No pipeline found for branch", "feature-branch"),  # no pipeline
     ],
 )
 async def test_respond_comment_restart_jobs_variations(
     is_internal,
     pipeline_exists,
     retry_success,
-    expected_action,
+    expected_log,
     expected_branch,
     mock_comment_event,
     mock_gh,
@@ -844,6 +837,7 @@ async def test_respond_comment_restart_jobs_variations(
     mock_pr_data_for_comment,
     setup_pr_mocks,
     setup_pipeline_mocks,
+    caplog,
 ):
     """Should handle restart jobs for various scenarios."""
     mock_comment_event.data["comment"]["body"] = "@hubcast-bot restart failed"
@@ -856,12 +850,15 @@ async def test_respond_comment_restart_jobs_variations(
     setup_pr_mocks(mock_pr_data_for_comment)
     setup_pipeline_mocks(pipeline_exists=pipeline_exists, retry_success=retry_success)
 
-    result = await respond_comment(
+    await respond_comment(
         event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == expected_action
-    assert result["branch"] == expected_branch
+    assert expected_log in caplog.text
+    assert any(
+        hasattr(record, "branch") and record.branch == expected_branch
+        for record in caplog.records
+    )
 
 
 # Tests for rerun_check
@@ -869,31 +866,31 @@ async def test_respond_comment_restart_jobs_variations(
 
 @pytest.mark.asyncio
 async def test_check_rerun_skip_old_commit(
-    mock_check_run_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_check_run_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """Check rerun should be skipped if the latest commit on the branch does not equal the check run commit."""
 
     # the branch's latest commit is different from the check run's head_sha
     mock_gh.get_branch.return_value = {"commit": {"sha": "latest-sha-456"}}
 
-    result = await rerun_check(
+    await rerun_check(
         event=mock_check_run_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "skipped"
+    assert "Skipped check rerun - old commit" in caplog.text
 
 
 @pytest.mark.asyncio
 async def test_check_rerun_requested(
-    mock_check_run_event, mock_gh, mock_gl, mock_repligit_ops
+    mock_check_run_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
     """Check rerun should be requested if all conditions are met."""
 
     # latest commit on the branch matches the check run head_sha
     mock_gh.get_branch.return_value = {"commit": {"sha": "check-run-sha-123"}}
 
-    result = await rerun_check(
+    await rerun_check(
         event=mock_check_run_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert result["action"] == "rerun_requested"
+    assert "Rerun check requested for branch" in caplog.text

@@ -81,15 +81,19 @@ def make_event(data):
     ],
 )
 async def test_pipeline_status_mapping(
-    gitlab_status, github_status, base_pipeline_event, mock_gh, mock_gl
+    gitlab_status, github_status, base_pipeline_event, mock_gh, mock_gl, caplog
 ):
     """Should map GitLab pipeline status to GitHub status."""
     base_pipeline_event["object_attributes"]["status"] = gitlab_status
     event = make_event(base_pipeline_event)
 
-    result = await pipeline_status_relay(event, mock_gh, mock_gl, "ci")
+    await pipeline_status_relay(event, mock_gh, mock_gl, "ci")
 
-    assert result == github_status
+    assert "Relayed pipeline status" in caplog.text
+    assert any(
+        hasattr(record, "status") and record.status == github_status
+        for record in caplog.records
+    )
     commit, name, status = mock_gh.set_check_status.call_args[0][:3]
     assert commit == "test-sha"
     assert name == "ci"
@@ -112,6 +116,7 @@ async def test_pipeline_commit_resolution(
     base_pipeline_event,
     mock_gh,
     mock_gl,
+    caplog,
 ):
     """Should resolve correct commit SHA for different pipeline types."""
     if merge_request:
@@ -123,6 +128,7 @@ async def test_pipeline_commit_resolution(
     event = make_event(base_pipeline_event)
     await pipeline_status_relay(event, mock_gh, mock_gl, "ci")
 
+    assert "Relayed pipeline status" in caplog.text
     commit, name, _ = mock_gh.set_check_status.call_args[0][:3]
     assert commit == expected_commit
     assert name == "ci"
@@ -138,7 +144,7 @@ async def test_pipeline_commit_resolution(
     ],
 )
 async def test_job_commit_resolution(
-    ref, expected_commit, base_job_event, mock_gh, mock_gl
+    ref, expected_commit, base_job_event, mock_gh, mock_gl, caplog
 ):
     """Should resolve correct commit SHA for different job types."""
     base_job_event["ref"] = ref
@@ -146,6 +152,7 @@ async def test_job_commit_resolution(
 
     await job_status_relay(event, mock_gh, mock_gl, "ci")
 
+    assert "Relayed job status" in caplog.text
     commit, name, _ = mock_gh.set_check_status.call_args[0][:3]
     assert commit == expected_commit
     assert name == "ci / test-job"

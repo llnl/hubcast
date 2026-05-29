@@ -19,10 +19,6 @@ class GitHubRouter(routing.Router):
     Custom router to handle GitHub interactions for hubcast
     """
 
-    def register(self, event_type: str, **data_detail: Any):  # type: ignore[override]
-        """Register a callback. Relaxes return type to allow dict returns for testing."""
-        return super().register(event_type, **data_detail)
-
     async def dispatch(self, event: sansio.Event, *args: Any, **kwargs: Any) -> None:
         """Dispatch an event to all registered function(s)."""
         found_callbacks = self.fetch(event)
@@ -49,7 +45,7 @@ async def sync_branch(
     gl_user: str,
     *arg,
     **kwargs,
-) -> dict[str, str]:
+) -> None:
     """Sync the git branch referenced to GitLab."""
     src_repo_url = event.data["repository"]["clone_url"]
     src_fullname = event.data["repository"]["full_name"]
@@ -60,7 +56,8 @@ async def sync_branch(
 
     # skip branches from push events that are also pull requests
     if await gh.get_prs(branch=sync_ref):
-        return {"action": "skipped", "reason": "branch_has_open_pr"}
+        log.info("Skipped branch sync - branch has open PR", extra={"ref": sync_ref})
+        return
 
     # only refresh config on default branch pushes (where .github/hubcast.yml lives)
     default_branch = event.data["repository"]["default_branch"]
@@ -93,13 +90,13 @@ async def sync_branch(
 
     if want_sha in have_shas:
         log.info(
-            "Destination ref already up-to-date",
+            "Skipped branch sync - already up-to-date",
             extra={"ref": sync_ref},
         )
-        return {"action": "skipped", "reason": "up_to_date"}
+        return
 
     log.info(
-        "Mirroring refs",
+        "Syncing branch",
         extra={
             "ref": sync_ref,
             "from_sha": from_sha,
@@ -128,15 +125,13 @@ async def sync_branch(
     )
 
     log.info(
-        "Successfully mirrored refs",
+        "Synced branch",
         extra={
             "ref": sync_ref,
             "from_sha": from_sha,
             "want_sha": want_sha,
         },
     )
-
-    return {"action": "synced"}
 
 
 @router.register("push", deleted=True)
@@ -162,15 +157,12 @@ async def remove_branch(
     head_sha = gl_refs.get(sync_ref)
 
     if head_sha is None:
-        log.info(
-            "Skipped branch removal - ref not found",
-            extra={"action": "skipped", "reason": "ref_not_found", "ref": sync_ref},
-        )
+        log.info("Skipped branch removal - ref not found", extra={"ref": sync_ref})
         return
 
     null_sha = "0" * 40
 
-    log.info("Deleting ref", extra={"ref": sync_ref})
+    log.info("Deleting branch", extra={"ref": sync_ref})
 
     await send_pack(
         dest_remote_url,
@@ -182,10 +174,7 @@ async def remove_branch(
         password=gl_token,
     )
 
-    log.info(
-        "Successfully deleted ref",
-        extra={"action": "deleted", "ref": sync_ref},
-    )
+    log.info("Deleted branch", extra={"ref": sync_ref})
 
 
 # -----------------------------------
@@ -201,7 +190,7 @@ async def sync_pr(
     src_repo_private: bool,
     want_sha: str,
     default_branch: str,
-) -> dict[str, Any]:
+) -> None:
     """Sync the git fork/branch referenced in a PR to GitLab.
 
     This isn't technically an event handler, but is used a couple different ways in this file.
@@ -226,13 +215,13 @@ async def sync_pr(
     if is_pull_request_fork and src_repo_private:
         # GitHub apps will not have access to private forks
         log.warning(
-            "Cannot sync pull request from private fork",
+            "Skipped PR sync - private fork",
             extra={
                 "pull_request_id": pull_request_id,
                 "fork_fullname": pull_request["head"]["repo"]["full_name"],
             },
         )
-        return {"action": "skipped", "reason": "private_fork"}
+        return
 
     # get the repository configuration from .github/hubcast.yml
     repo_config, _ = await get_repo_config(gh, base_fullname)
@@ -244,7 +233,8 @@ async def sync_pr(
                 status="skipped",
                 title="Hubcast disables sync for draft PRs.",
             )
-        return {"action": "skipped", "reason": "draft_pr"}
+        log.info("Skipped PR sync - draft PR")
+        return
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
@@ -254,13 +244,11 @@ async def sync_pr(
     have_shas = set(gl_refs.values())
     from_sha = gl_refs.get(sync_ref) or ("0" * 40)
 
-    return_val: dict[str, Any]
     if want_sha in have_shas:
         log.info(
-            "Destination ref already up-to-date",
+            "Skipped PR sync - already up-to-date",
             extra={"ref": sync_ref},
         )
-        return_val = {"action": "skipped", "reason": "up_to_date"}
     else:  # needs sync
         if is_pull_request_fork and not src_repo_private:
             # no auth needed for public forks
@@ -284,8 +272,9 @@ async def sync_pr(
 
         # upload packfile to gitlab repository
         log.info(
-            "Mirroring refs",
+            "Syncing PR",
             extra={
+                "ref": sync_ref,
                 "from_sha": from_sha,
                 "want_sha": want_sha,
             },
@@ -300,7 +289,14 @@ async def sync_pr(
             password=gl_token,
         )
 
-        return_val = {"action": "synced", "sha": want_sha}
+        log.info(
+            "Synced PR",
+            extra={
+                "ref": sync_ref,
+                "from_sha": from_sha,
+                "sha": want_sha,
+            },
+        )
 
     # skip already created MRs
     if repo_config.create_mr and not await gl.get_mr(
@@ -313,9 +309,7 @@ async def sync_pr(
             ref_title=pull_request["title"],
             ref_url=pull_request["html_url"],
         )
-        return_val["mr_created"] = True
-
-    return return_val
+        log.info("Created MR", extra={"branch": sync_branch})
 
 
 @router.register("pull_request", action="opened")
@@ -328,7 +322,7 @@ async def sync_pr_event(
     gl_user: str,
     *arg,
     **kwargs,
-) -> dict[str, Any]:
+) -> None:
     """Sync the git fork/branch referenced in a PR to GitLab."""
     pull_request = event.data["pull_request"]
     src_repo_private = pull_request["head"]["repo"]["private"]
@@ -338,7 +332,7 @@ async def sync_pr_event(
     else:
         # these events are not triggered by new commits, so we sync the head
         want_sha = pull_request["head"]["sha"]
-    return await sync_pr(
+    await sync_pr(
         pull_request,
         gh,
         gl,
@@ -357,7 +351,7 @@ async def remove_pr(
     gl_user: str,
     *arg,
     **kwargs,
-) -> dict[str, str]:
+) -> None:
     pull_request = event.data["pull_request"]
     src_fullname = pull_request["head"]["repo"]["full_name"]
     base_fullname = pull_request["base"]["repo"]["full_name"]
@@ -366,7 +360,8 @@ async def remove_pr(
     repo_config, _ = await get_repo_config(gh, base_fullname)
 
     if not repo_config.delete_closed:
-        return {"action": "skipped", "reason": "delete_closed_disabled"}
+        log.info("Skipped PR branch removal - delete_closed disabled")
+        return
 
     # if the pull request comes from a fork we should clean up
     # the branch upon closing or merging the PR. However, if the
@@ -375,7 +370,8 @@ async def remove_pr(
     # internal repository
     is_pull_request_fork = src_fullname != base_fullname
     if not is_pull_request_fork:
-        return {"action": "skipped", "reason": "internal_branch"}
+        log.info("Skipped PR branch removal - internal branch")
+        return
 
     pull_request_id = pull_request["number"]
     sync_ref = f"refs/heads/pr-{pull_request_id}"
@@ -387,11 +383,12 @@ async def remove_pr(
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     head_sha = gl_refs.get(sync_ref)
     if head_sha is None:
-        return {"action": "skipped", "reason": "ref_not_found"}
+        log.info("Skipped PR branch removal - ref not found", extra={"ref": sync_ref})
+        return
 
     null_sha = "0" * 40
 
-    log.info("Deleting ref", extra={"ref": sync_ref})
+    log.info("Deleting PR branch", extra={"ref": sync_ref})
     await send_pack(
         dest_remote_url,
         sync_ref,
@@ -402,7 +399,7 @@ async def remove_pr(
         password=gl_token,
     )
 
-    return {"action": "deleted"}
+    log.info("Deleted PR branch", extra={"ref": sync_ref})
 
 
 @router.register("pull_request_review", action="submitted")
@@ -413,7 +410,7 @@ async def respond_pr_comment(
     gl_user: str,
     *arg,
     **kwargs,
-) -> dict[str, str]:
+) -> None:
     comment = event.data["review"]["body"]
 
     # reviews without comments (plain approvals or RFC)
@@ -440,9 +437,9 @@ async def respond_pr_comment(
         )
         await gh.react_to_comment(event.data["review"]["node_id"], "+1")
 
-        return {"action": "approve_sent"}
-
-    return {"action": "skipped", "reason": "no_command_matched"}
+        log.info("Approval sent")
+    else:
+        log.info("Skipped PR review comment - no command matched")
 
 
 @router.register("issue_comment", action="created")
@@ -453,19 +450,21 @@ async def respond_comment(
     gl_user: str,
     *arg,
     **kwargs,
-) -> dict[str, str]:
+) -> None:
     # differentiate issue vs PR comment
     if "pull_request" not in event.data["issue"]:
-        return {"action": "skipped", "reason": "not_pr_comment"}
+        log.info("Skipped comment - not PR comment")
+        return
 
     comment = event.data["comment"]["body"]
     response = None
     plus_one = False
-    return_val = {"action": "skipped", "reason": "no_command_matched"}
+    action_logged = False
 
     if re.search(f"{gh.bot_caller} help", comment, re.IGNORECASE):
         response = comments.help_message(gh.bot_caller)
-        return_val = {"action": "help_sent"}
+        log.info("Help message sent")
+        action_logged = True
 
     elif re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
         response = (
@@ -474,7 +473,8 @@ async def respond_comment(
             "to submit an approval. This ensures the approval is tied to a specific "
             "commit to avoid unintended syncing of malicious commits."
         )
-        return_val = {"action": "approval_reminder_sent"}
+        log.info("Approval reminder sent")
+        action_logged = True
 
     elif re.search(
         f"{gh.bot_caller} (re[-]?)?(run|start) pipeline", comment, re.IGNORECASE
@@ -508,10 +508,12 @@ async def respond_comment(
         if pipeline_url:
             response = f"I've started a new [pipeline]({pipeline_url}) for you!"
             plus_one = True
-            return_val = {"action": "pipeline_started", "branch": branch}
+            log.info("Pipeline started for branch", extra={"branch": branch})
+            action_logged = True
         else:
             response = "I had a problem starting the pipeline."
-            return_val = {"action": "pipeline_failed", "branch": branch}
+            log.info("Pipeline failed to start for branch", extra={"branch": branch})
+            action_logged = True
 
     elif re.search(
         f"{gh.bot_caller} restart failed(?:[- ]?jobs)?", comment, re.IGNORECASE
@@ -547,13 +549,16 @@ async def respond_comment(
                     f"I've retried any failed jobs in the [pipeline]({pipeline_url})!"
                 )
                 plus_one = True
-                return_val = {"action": "jobs_restarted", "branch": branch}
+                log.info("Jobs restarted for branch", extra={"branch": branch})
+                action_logged = True
             else:
                 response = "I had a problem retrying jobs in the pipeline."
-                return_val = {"action": "jobs_restart_failed", "branch": branch}
+                log.info("Jobs restart failed for branch", extra={"branch": branch})
+                action_logged = True
         else:
             response = "No pipeline exists."
-            return_val = {"action": "no_pipeline", "branch": branch}
+            log.info("No pipeline found for branch", extra={"branch": branch})
+            action_logged = True
 
     if response:
         await gh.post_comment(event.data["issue"]["number"], response)
@@ -561,7 +566,8 @@ async def respond_comment(
     if plus_one:
         await gh.react_to_comment(event.data["comment"]["node_id"], "+1")
 
-    return return_val
+    if not action_logged:
+        log.info("Skipped comment - no command matched")
 
 
 @router.register("check_run", action="rerequested")
@@ -572,7 +578,7 @@ async def rerun_check(
     gl_user: str,
     *arg,
     **kwargs,
-) -> dict[str, str]:
+) -> None:
     """
     Handles a user re-running a check run for the latest commit in the branch.
     See https://docs.github.com/en/webhooks/webhook-events-and-payloads?actionType=rerequested#check_run.
@@ -587,12 +593,12 @@ async def rerun_check(
 
     # only rerun if this commit is the head of the branch
     if check_run_commit != latest_commit:
-        log.info("user tried to re-run check for old commit")
-        return {"action": "skipped"}
+        log.info("Skipped check rerun - old commit")
+        return
 
     # get the GL repo info and run the pipeline
     repo_config, _ = await get_repo_config(gh, src_fullname)
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     await gl.run_pipeline(dest_fullname, branch)
 
-    return {"action": "rerun_requested"}
+    log.info("Rerun check requested for branch", extra={"branch": branch})

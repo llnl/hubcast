@@ -28,10 +28,6 @@ class GitLabRouter(routing.Router):
     Custom router to better handle logging of errors
     """
 
-    def register(self, event_type: str, **data_detail: Any):  # type: ignore[override]
-        """Register a callback. Relaxes return type to allow dict returns for testing."""
-        return super().register(event_type, **data_detail)
-
     async def dispatch(self, event: sansio.Event, *args: Any, **kwargs: Any) -> None:
         try:
             await super().dispatch(event, *args, **kwargs)
@@ -61,12 +57,13 @@ async def pipeline_status_relay(
     check_types: list,
     *args,
     **kwargs,
-) -> str | None:
+) -> None:
     """Relay status of a GitLab pipeline back to GitHub."""
 
     pipeline_status = event.data["object_attributes"]["status"]
     status = GITLAB_TO_GITHUB_STATUS.get(pipeline_status)
     if not status:
+        log.info("Skipped pipeline status relay", extra={"status": pipeline_status})
         return
 
     pipeline_id = event.data["object_attributes"]["id"]
@@ -108,7 +105,7 @@ async def pipeline_status_relay(
         details_url=pipeline_url,
     )
 
-    return status
+    log.info("Relayed pipeline status", extra={"status": status, "sha": sha})
 
 
 @router.register("Job Hook")
@@ -120,11 +117,12 @@ async def job_status_relay(
     check_types: list,
     *args,
     **kwargs,
-) -> str | None:
+) -> None:
     """Relay status of a GitLab job back to GitHub."""
     job_status = event.data["build_status"]
     status = GITLAB_TO_GITHUB_STATUS.get(job_status)
     if not status:
+        log.info("Skipped job status relay", extra={"status": job_status})
         return
 
     project = event.data["project"]["path_with_namespace"]
@@ -163,4 +161,6 @@ async def job_status_relay(
         details_url=job_url,
     )
 
-    return status
+    log.info(
+        "Relayed job status", extra={"status": status, "sha": sha, "job_name": job_name}
+    )
