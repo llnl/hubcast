@@ -316,9 +316,7 @@ async def test_sync_branch_skip_open_pr(
     # mocking hubcast.clients.github.client.GitHubClient.get_prs
     mock_gh.get_prs.return_value = [123]  # Simulate an open PR exists
 
-    await sync_branch(
-        event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
+    await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
     assert "Skipped branch sync - branch has open PR" in caplog.text
 
@@ -338,15 +336,15 @@ async def test_sync_branch_skip_up_to_date(
         "refs/heads/main": "sha-123",  # Same as event's head_commit.id
     }
 
-    await sync_branch(
-        event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
+    await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
     assert "Skipped branch sync - already up-to-date" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_sync_branch_synced(mock_push_event, mock_gh, mock_gl, mock_repligit_ops, caplog):
+async def test_sync_branch_synced(
+    mock_push_event, mock_gh, mock_gl, mock_repligit_ops, caplog
+):
     """Branches should sync if all conditions are met."""
 
     # no open PRs for the branch
@@ -355,9 +353,7 @@ async def test_sync_branch_synced(mock_push_event, mock_gh, mock_gl, mock_replig
     # mock ls_remote returning refs that do NOT contain the want_sha
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha-456"}
 
-    await sync_branch(
-        event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
+    await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
     assert "Synced branch" in caplog.text
 
@@ -410,15 +406,15 @@ async def test_sync_pr_skip_private_fork(
 
     mock_pr_event.data["pull_request"]["head"]["repo"]["private"] = True
 
-    await sync_pr_event(
-        event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
+    await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
     assert "Skipped PR sync - private fork" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_sync_pr_skip_draft(mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog):
+async def test_sync_pr_skip_draft(
+    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
+):
     """PR sync should be skipped for draft PRs (when sync_drafts is False)."""
 
     mock_pr_event.data["pull_request"]["draft"] = True
@@ -427,9 +423,7 @@ async def test_sync_pr_skip_draft(mock_pr_event, mock_gh, mock_gl, mock_repligit
         True,
     )
 
-    await sync_pr_event(
-        event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
+    await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
     assert "Skipped PR sync - draft PR" in caplog.text
 
@@ -442,22 +436,20 @@ async def test_sync_pr_skip_up_to_date(
 
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/pr-123": "pr-sha-123"}
 
-    await sync_pr_event(
-        event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
+    await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
     assert "Skipped PR sync - already up-to-date" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_sync_pr_synced_fork(mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog):
+async def test_sync_pr_synced_fork(
+    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
+):
     """PR sync should proceed if all conditions are met (from fork)."""
 
     # ls_remote does not have the PR branch sha
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
 
-    await sync_pr_event(
-        event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
+    await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
     assert "Synced PR" in caplog.text
 
@@ -474,9 +466,7 @@ async def test_sync_pr_synced_internal(
 
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
 
-    await sync_pr_event(
-        event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
+    await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
     assert "Synced PR" in caplog.text
 
@@ -493,9 +483,7 @@ async def test_sync_pr_opened_uses_head_sha(
 
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
 
-    await sync_pr_event(
-        event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
+    await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
     assert "Synced PR" in caplog.text
     # Verify the sha was logged in the extra fields
@@ -531,9 +519,7 @@ async def test_sync_pr_creates_mr_when_configured(
     mock_gl.get_mr = AsyncMock(return_value=None)  # No MR exists yet
     mock_gl.create_mr = AsyncMock()
 
-    await sync_pr_event(
-        event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
+    await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
     assert "Synced PR" in caplog.text
     assert "Created MR" in caplog.text
@@ -560,9 +546,7 @@ async def test_sync_pr_skips_mr_when_already_exists(
     mock_gl.get_mr = AsyncMock(return_value={"id": 42})  # MR already exists
     mock_gl.create_mr = AsyncMock()
 
-    await sync_pr_event(
-        event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
-    )
+    await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
     assert "Synced PR" in caplog.text
     assert "Created MR" not in caplog.text
@@ -653,7 +637,11 @@ async def test_remove_pr_deleted(
         ("@hubcast-bot help", "Help message sent", True),
         ("@hubcast-bot approve", "Approval reminder sent", True),
         ("random text", "Skipped comment - no command matched", True),
-        ("@hubcast-bot help", "Skipped comment - not PR comment", False),  # issue comment
+        (
+            "@hubcast-bot help",
+            "Skipped comment - not PR comment",
+            False,
+        ),  # issue comment
     ],
 )
 async def test_respond_comment_simple_commands(
@@ -740,9 +728,19 @@ async def test_respond_comment_run_pipeline(
 @pytest.mark.parametrize(
     "is_internal,run_success,expected_log,expected_branch",
     [
-        (True, True, "Pipeline started for branch", "feature-branch"),  # internal PR success
+        (
+            True,
+            True,
+            "Pipeline started for branch",
+            "feature-branch",
+        ),  # internal PR success
         (False, True, "Pipeline started for branch", "pr-123"),  # fork PR success
-        (True, False, "Pipeline failed to start for branch", "feature-branch"),  # internal PR failed
+        (
+            True,
+            False,
+            "Pipeline failed to start for branch",
+            "feature-branch",
+        ),  # internal PR failed
     ],
 )
 async def test_respond_comment_run_pipeline_variations(
@@ -819,10 +817,28 @@ async def test_respond_comment_restart_jobs(
 @pytest.mark.parametrize(
     "is_internal,pipeline_exists,retry_success,expected_log,expected_branch",
     [
-        (True, True, True, "Jobs restarted for branch", "feature-branch"),  # internal success
+        (
+            True,
+            True,
+            True,
+            "Jobs restarted for branch",
+            "feature-branch",
+        ),  # internal success
         (False, True, True, "Jobs restarted for branch", "pr-123"),  # fork success
-        (True, True, False, "Jobs restart failed for branch", "feature-branch"),  # retry failed
-        (True, False, False, "No pipeline found for branch", "feature-branch"),  # no pipeline
+        (
+            True,
+            True,
+            False,
+            "Jobs restart failed for branch",
+            "feature-branch",
+        ),  # retry failed
+        (
+            True,
+            False,
+            False,
+            "No pipeline found for branch",
+            "feature-branch",
+        ),  # no pipeline
     ],
 )
 async def test_respond_comment_restart_jobs_variations(
