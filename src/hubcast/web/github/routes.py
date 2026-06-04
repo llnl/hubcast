@@ -390,6 +390,10 @@ async def respond_pr_comment(
 ) -> None:
     comment = event.data["review"]["body"]
 
+    # reviews without comments (plain approvals or RFC)
+    if not comment:
+        return
+
     if re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
         # sync PR changes to the destination on behalf of the commenter
         # does not handle PR deletions, those will need to be manually cleaned by project maintainers
