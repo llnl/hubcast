@@ -24,8 +24,8 @@ class RepoConfig(BaseModel):
     sync_drafts_msg: bool = True
 
     # Allow users to control the granularity of checks reported to GitHub
-    # via setting one or more of "pipeline" and/or "jobs"
-    check_types: list[Literal["pipeline", "jobs"]] = ["pipeline"]
+    # via setting one or more of "pipeline", "child-pipelines" and/or "jobs"
+    check_types: list[Literal["pipeline", "child-pipelines", "jobs"]] = ["pipeline"]
 
     # Create GitLab MRs that mirror GitHub PRs to allow users to test
     # synthetic merge commits between the branch and the default branch

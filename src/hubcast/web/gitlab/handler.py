@@ -44,6 +44,8 @@ class GitLabHandler:
             gh_repo = routing_token.gh_repo
             gh_check_name = routing_token.gh_check
 
+            relayed_check_types = routing_token.check_types
+
             body = await request.read()
 
             # Pass token as secret for gidgetlab's string validation
@@ -67,7 +69,13 @@ class GitLabHandler:
             gitlab_client = self.gitlab_client_factory.create_client(gl_user)
             await spawn(
                 request,
-                router.dispatch(event, github_client, gitlab_client, gh_check_name),
+                router.dispatch(
+                    event,
+                    github_client,
+                    gitlab_client,
+                    gh_check_name,
+                    relayed_check_types,
+                ),
             )
 
             # return a "Success"
