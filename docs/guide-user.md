@@ -32,8 +32,9 @@ Repo:
 
   # Optional: granularity of CI statuses reported to GitHub (default: [pipeline])
   # Set to [pipeline] for overall pipeline status only
+  # Set to [child-pipelines] for child pipeline statuses only
   # Set to [jobs] for individual job statuses only
-  # Set to [pipeline, jobs] to report both
+  # Set to [pipeline, child-pipelines, jobs] to report all types
   check_types: [pipeline]
 
   # Optional: delete branches from destination when source PR is closed (default: true)
