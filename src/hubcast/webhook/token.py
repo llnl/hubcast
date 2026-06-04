@@ -1,3 +1,5 @@
+from typing import Literal
+
 import jwt
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -25,6 +27,8 @@ class RoutingToken(BaseModel):
     gh_owner: str
     gh_repo: str
     gh_check: str
+
+    check_types: list[Literal["pipeline", "child-pipelines", "jobs"]] = ["pipeline"]
 
     def encode(self, secret: str) -> str:
         """Generate a cryptographically signed JWT token.

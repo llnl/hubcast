@@ -54,6 +54,7 @@ async def pipeline_status_relay(
     gh: GitHubClient,
     gl: GitLabClient,
     gh_check_name: str,
+    check_types: list,
     *args,
     **kwargs,
 ) -> None:
@@ -64,9 +65,16 @@ async def pipeline_status_relay(
     if not status:
         return
 
-    project = event.data["project"]["path_with_namespace"]
     pipeline_id = event.data["object_attributes"]["id"]
+    pipeline_source = event.data["object_attributes"]["source"]
+    project = event.data["project"]["path_with_namespace"]
     sha = event.data["object_attributes"]["sha"]
+
+    is_child_pipeline = pipeline_source == "parent_pipeline"
+
+    event_type = "child-pipelines" if is_child_pipeline else "pipeline"
+    if event_type not in check_types:
+        return
 
     if event.data.get("merge_request"):
         # Fetch the pipeline from the API to get the correct ref (which may include /merge suffix)
@@ -81,9 +89,15 @@ async def pipeline_status_relay(
 
     pipeline_url = event.data["object_attributes"]["url"]
 
+    if is_child_pipeline:
+        pipeline_name = event.data["object_attributes"].get("name") or pipeline_id
+        name = f"{gh_check_name} / {pipeline_name}"
+    else:
+        name = gh_check_name
+
     await gh.set_check_status(
         sha,
-        gh_check_name,
+        name,
         status,
         title="External pipeline run",
         summary=f"[View this pipeline on {urlparse(pipeline_url).netloc}]({pipeline_url})",
@@ -97,6 +111,7 @@ async def job_status_relay(
     gh: GitHubClient,
     gl: GitLabClient,
     gh_check_name: str,
+    check_types: list,
     *args,
     **kwargs,
 ) -> None:
@@ -118,6 +133,15 @@ async def job_status_relay(
 
     job_id = event.data["build_id"]
     job_name = event.data["build_name"]
+
+    if "child-pipelines" in check_types:
+        pipeline_id = event.data["pipeline_id"]
+        pipeline = await gl.get_pipeline(project, pipeline_id)
+
+        pipeline_source = pipeline.get("source", "")
+        if pipeline_source == "parent_pipeline":
+            pipeline_name = pipeline.get("name") or pipeline_id
+            job_name = f"{pipeline_name} / {job_name}"
 
     repository_url = event.data["project"]["web_url"]
     job_url = f"{repository_url}/-/jobs/{job_id}"
