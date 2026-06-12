@@ -75,14 +75,15 @@ build-job:
     - echo "Hello, $GITLAB_USER_LOGIN!"
 ```
 
-To ensure the source and destination repos have the same state, commit the changes and push to the two remotes:
+Commit the changes and push to the source repository:
 
 ```sh
 git add . && git commit -m "init"
 git remote add gh git@github.com:example/hubcast-test.git
-git remote add gl git@gitlab.com:example/hubcast-test.git
-git push gh main && git push gl main
+git push gh main
 ```
+
+While unlikely, ensure that your destination repository is never "ahead" of the source repository (i.e., has newer commits); Hubcast will fail to sync in this case.
 
 ## Installation
 
@@ -130,14 +131,14 @@ Depending on the setup of your Hubcast installation, you can request assistance 
 
 The bot supports the following commands:
 - `@{bot} help` - Display available commands and usage information
-- `@{bot} approve` - Sync this pull request to the destination forge and trigger a new pipeline (requires maintainer permissions)
+- `@{bot} sync` or `approve` - Sync this pull request to the destination forge and trigger a new pipeline (requires maintainer permissions)
 - `@{bot} run pipeline` - Request a new run of the GitLab CI pipeline
 - `@{bot} restart failed jobs` - Restart any failed jobs in the latest CI pipeline
 
 Replace `@{bot}` with your instance's bot user (e.g., `@lc-hubcast`) or use `/hubcast` if no bot user is configured.
 
 #### Approval
-To securely sync commits from external collaborators, approvals require links to a commit hash. You can comment your approval on a PR review:
+To securely sync commits from external collaborators, approvals must be done via commenting on a PR review, ensuring that the approval is linked to a specific commit.
 
 ![A GitHub pull request review; the user has written a comment `@lc-hubcast approve` to sync the user's contributions.](/docs/img/approve-comment.png)
 

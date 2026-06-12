@@ -394,7 +394,7 @@ async def respond_pr_comment(
     if not comment:
         return
 
-    if re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
+    if re.search(f"{gh.bot_caller} (approve|sync)", comment, re.IGNORECASE):
         # sync PR changes to the destination on behalf of the commenter
         # does not handle PR deletions, those will need to be manually cleaned by project maintainers
 
@@ -435,12 +435,12 @@ async def respond_comment(
     if re.search(f"{gh.bot_caller} help", comment, re.IGNORECASE):
         response = comments.help_message(gh.bot_caller)
 
-    elif re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
+    elif re.search(f"{gh.bot_caller} (approve|sync)", comment, re.IGNORECASE):
         response = (
-            "To approve the sync of this PR, please use the "
+            "To approve syncing this PR, please use the "
             "[GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#approval) "
-            "to submit an approval. This ensures the approval is tied to a specific "
-            "commit to avoid unintended syncing of malicious commits."
+            "to submit an approval. This ensures approval is tied to a specific "
+            "commit to avoid the sync of malicious data."
         )
 
     elif re.search(
