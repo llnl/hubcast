@@ -85,7 +85,14 @@ def make_event(data):
     ],
 )
 async def test_pipeline_status_mapping(
-    gitlab_status, github_status, check_types, should_relay, base_pipeline_event, mock_gh, mock_gl, caplog
+    gitlab_status,
+    github_status,
+    check_types,
+    should_relay,
+    base_pipeline_event,
+    mock_gh,
+    mock_gl,
+    caplog,
 ):
     """Should map GitLab pipeline status to GitHub status and respect filters."""
     base_pipeline_event["object_attributes"]["status"] = gitlab_status
@@ -117,7 +124,14 @@ async def test_pipeline_status_mapping(
         ({"id": 1}, "/head", "test-sha", "", ["pipeline"], True),
         ({"id": 1}, "/merge", "source", "", ["pipeline"], True),
         (None, None, "test-sha", "parent_pipeline", ["child-pipelines"], True),
-        (None, None, "test-sha", "parent_pipeline", ["pipeline"], False),  # child filtered out
+        (
+            None,
+            None,
+            "test-sha",
+            "parent_pipeline",
+            ["pipeline"],
+            False,
+        ),  # child filtered out
     ],
 )
 async def test_pipeline_commit_resolution(
@@ -160,16 +174,74 @@ async def test_pipeline_commit_resolution(
     "ref,expected_commit,job_status,check_types,pipeline_source,expected_name,should_relay",
     [
         ("refs/heads/main", "test-sha", "success", ["jobs"], "", "ci / test-job", True),
-        ("refs/merge-requests/1/head", "test-sha", "success", ["jobs"], "", "ci / test-job", True),
-        ("refs/merge-requests/1/merge", "source", "success", ["jobs"], "", "ci / test-job", True),
-        ("refs/heads/main", "test-sha", "created", ["jobs"], "", "ci / test-job", False),  # unmapped
-        ("refs/heads/main", "test-sha", "success", ["child-pipelines"], "parent_pipeline", "ci / child-pipe / test-job", True),
-        ("refs/heads/main", "test-sha", "success", ["child-pipelines"], "", "ci / test-job", True),  # not child
-        ("refs/heads/main", "test-sha", "success", ["jobs"], "parent_pipeline", "ci / test-job", True),  # child not tracked
+        (
+            "refs/merge-requests/1/head",
+            "test-sha",
+            "success",
+            ["jobs"],
+            "",
+            "ci / test-job",
+            True,
+        ),
+        (
+            "refs/merge-requests/1/merge",
+            "source",
+            "success",
+            ["jobs"],
+            "",
+            "ci / test-job",
+            True,
+        ),
+        (
+            "refs/heads/main",
+            "test-sha",
+            "created",
+            ["jobs"],
+            "",
+            "ci / test-job",
+            False,
+        ),  # unmapped
+        (
+            "refs/heads/main",
+            "test-sha",
+            "success",
+            ["child-pipelines"],
+            "parent_pipeline",
+            "ci / child-pipe / test-job",
+            True,
+        ),
+        (
+            "refs/heads/main",
+            "test-sha",
+            "success",
+            ["child-pipelines"],
+            "",
+            "ci / test-job",
+            True,
+        ),  # not child
+        (
+            "refs/heads/main",
+            "test-sha",
+            "success",
+            ["jobs"],
+            "parent_pipeline",
+            "ci / test-job",
+            True,
+        ),  # child not tracked
     ],
 )
 async def test_job_commit_resolution(
-    ref, expected_commit, job_status, check_types, pipeline_source, expected_name, should_relay, base_job_event, mock_gh, mock_gl, caplog
+    ref,
+    expected_commit,
+    job_status,
+    check_types,
+    pipeline_source,
+    expected_name,
+    should_relay,
+    base_job_event,
+    mock_gh,
+    mock_gl,
+    caplog,
 ):
     """Should resolve correct commit SHA, respect status mapping, and handle child pipeline naming."""
     base_job_event["ref"] = ref
