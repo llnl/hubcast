@@ -438,7 +438,9 @@ async def respond_pr_comment(
         )
         await gh.react_to_comment(event.data["review"]["node_id"], "+1")
 
-        log.info("Approval sent")
+        log.info(
+            "Mirrored ref with approval from review comment", extra={"ref": commit_sha}
+        )
     else:
         log.info("Skipped PR review comment - no command matched")
 

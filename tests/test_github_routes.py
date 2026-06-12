@@ -666,7 +666,11 @@ async def test_respond_comment_simple_commands(
 @pytest.mark.parametrize(
     "command,expected_log,needs_pr_setup",
     [
-        ("@hubcast-bot approve", "Approval sent", True),
+        (
+            "@hubcast-bot approve",
+            "Mirrored ref with approval from review comment",
+            True,
+        ),
         ("Looks good to me!", "Skipped PR review comment - no command matched", False),
         (None, "Skipped comment - no command matched", False),
     ],

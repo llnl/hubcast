@@ -37,6 +37,7 @@ jobs:
             style:
               - '.github/**/*'
               - 'src/**/*'
+              - 'tests/**/*'
               - 'pyproject.toml'
             security:
               - '.github/**/*'

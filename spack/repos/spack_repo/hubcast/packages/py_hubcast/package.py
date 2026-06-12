@@ -19,14 +19,10 @@ class PyHubcast(PythonPackage):
 
     version("main", branch="main")
 
-
     variant("ldap", default=False, description="Enable LDAP account map support")
-    variant("tests", default=False)
 
     depends_on("python@3.11:", type=("build", "run"))
-
     depends_on("py-hatchling", type="build")
-
     depends_on("py-aiohttp", type=("build", "run"))
     depends_on("py-aiojobs", type=("build", "run"))
     depends_on("py-pyjwt", type=("build", "run"))
@@ -37,7 +33,12 @@ class PyHubcast(PythonPackage):
     depends_on("py-pydantic", type=("build", "run"))
     depends_on("py-pydantic-settings", type=("build", "run"))
     depends_on("py-python-ldap", type=("build", "run"), when="+ldap")
-    depends_on("py-pytest", when="+tests")
-    depends_on("py-pytest-asyncio", when="+tests")
-    depends_on("py-pytest-mock", when="+tests")
+    depends_on("py-pytest", type="test")
+    depends_on("py-pytest-asyncio", type="test")
+    depends_on("py-pytest-mock", type="test")
 
+    @run_after("install")
+    @on_package_attributes(run_tests=True)
+    def install_test(self):
+        with working_dir(self.stage.source_path):
+            python("-m", "pytest", "tests")

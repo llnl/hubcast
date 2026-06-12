@@ -45,7 +45,8 @@ dev = [
     "pytest-mock",
     "ruff",
     "ty",
-    "typos"
+    "typos",
+    "coverage"
 ]
 
 [tool.pytest.ini_options]
