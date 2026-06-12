@@ -30,6 +30,8 @@ class RoutingToken(BaseModel):
 
     check_types: list[Literal["pipeline", "child-pipelines", "jobs"]] = ["pipeline"]
 
+    neutral_allow_failure: bool
+
     def encode(self, secret: str) -> str:
         """Generate a cryptographically signed JWT token.
 

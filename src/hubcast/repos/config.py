@@ -31,6 +31,9 @@ class RepoConfig(BaseModel):
     # synthetic merge commits between the branch and the default branch
     create_mr: bool = False
 
+    # if a job does not succeed and allow_failure is enabled in the job's GitLab definition, relay the job's GitHub status as "neutral"
+    neutral_allow_failure: bool = False
+
     @model_validator(mode="before")
     @classmethod
     def extract_repo_section(cls, data: Any) -> Any:

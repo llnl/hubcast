@@ -43,8 +43,8 @@ class GitLabHandler:
             gh_repo_owner = routing_token.gh_owner
             gh_repo = routing_token.gh_repo
             gh_check_name = routing_token.gh_check
-
             relayed_check_types = routing_token.check_types
+            neutral_allow_failure = routing_token.neutral_allow_failure
 
             body = await request.read()
 
@@ -75,6 +75,7 @@ class GitLabHandler:
                     gitlab_client,
                     gh_check_name,
                     relayed_check_types,
+                    neutral_allow_failure,
                 ),
             )
 

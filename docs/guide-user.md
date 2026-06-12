@@ -54,6 +54,12 @@ Repo:
   # Optional: create GitLab MRs from GitHub PRs
   # allows developers to create synthetic merge commits using GitLab's merged results pipelines feature
   create_mr: false
+
+  # Optional: 
+  # if a job does not succeed and allow_failure is enabled in the job's GitLab definition,
+  # Hubcast will note the job's GitHub status as "neutral," with a note that the job was allowed to fail
+  # requires check_types to contain "jobs"
+  neutral_allow_failure: false
 ```
 
 A minimal configuration requires only `dest_org` and `dest_name`:
