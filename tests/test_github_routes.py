@@ -668,6 +668,7 @@ async def test_respond_comment_simple_commands(
     [
         ("@hubcast-bot approve", "Approval sent", True),
         ("Looks good to me!", "Skipped PR review comment - no command matched", False),
+        (None, "Skipped comment - no command matched", False),
     ],
 )
 async def test_respond_pr_comment_commands(

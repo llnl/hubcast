@@ -23,6 +23,7 @@ def base_pipeline_event():
             "status": "success",
             "url": "https://gitlab.com/org/repo/-/pipelines/123",
             "id": 123,
+            "source": "",
         },
         "project": {"path_with_namespace": "org/repo"},
     }
@@ -71,54 +72,68 @@ def make_event(data):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "gitlab_status,github_status",
+    "gitlab_status,github_status,check_types,should_relay",
     [
-        ("pending", "queued"),
-        ("running", "in_progress"),
-        ("failed", "failure"),
-        ("canceled", "cancelled"),
-        ("success", "success"),
+        ("pending", "queued", ["pipeline"], True),
+        ("running", "in_progress", ["pipeline"], True),
+        ("failed", "failure", ["pipeline"], True),
+        ("canceled", "cancelled", ["pipeline"], True),
+        ("success", "success", ["pipeline"], True),
+        ("manual", None, ["pipeline"], False),  # unmapped status
+        ("created", None, ["pipeline"], False),  # unmapped status
+        ("success", "success", ["jobs"], False),  # wrong check_type
     ],
 )
 async def test_pipeline_status_mapping(
-    gitlab_status, github_status, base_pipeline_event, mock_gh, mock_gl, caplog
+    gitlab_status, github_status, check_types, should_relay, base_pipeline_event, mock_gh, mock_gl, caplog
 ):
-    """Should map GitLab pipeline status to GitHub status."""
+    """Should map GitLab pipeline status to GitHub status and respect filters."""
     base_pipeline_event["object_attributes"]["status"] = gitlab_status
     event = make_event(base_pipeline_event)
 
-    await pipeline_status_relay(event, mock_gh, mock_gl, "ci")
+    await pipeline_status_relay(event, mock_gh, mock_gl, "ci", check_types)
 
-    assert "Relayed pipeline status" in caplog.text
-    assert any(
-        hasattr(record, "status") and record.status == github_status
-        for record in caplog.records
-    )
-    commit, name, status = mock_gh.set_check_status.call_args[0][:3]
-    assert commit == "test-sha"
-    assert name == "ci"
-    assert status == github_status
+    if should_relay:
+        assert "Relayed pipeline status" in caplog.text
+        assert any(
+            hasattr(record, "status") and record.status == github_status
+            for record in caplog.records
+        )
+        commit, name, status = mock_gh.set_check_status.call_args[0][:3]
+        assert commit == "test-sha"
+        assert name == "ci"
+        assert status == github_status
+    else:
+        mock_gh.set_check_status.assert_not_called()
+        if github_status is None:
+            assert "Skipped pipeline status relay" in caplog.text
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "merge_request,ref_suffix,expected_commit",
+    "merge_request,ref_suffix,expected_commit,pipeline_source,check_types,should_relay",
     [
-        (None, None, "test-sha"),
-        ({"id": 1}, "/head", "test-sha"),
-        ({"id": 1}, "/merge", "source"),
+        (None, None, "test-sha", "", ["pipeline"], True),
+        ({"id": 1}, "/head", "test-sha", "", ["pipeline"], True),
+        ({"id": 1}, "/merge", "source", "", ["pipeline"], True),
+        (None, None, "test-sha", "parent_pipeline", ["child-pipelines"], True),
+        (None, None, "test-sha", "parent_pipeline", ["pipeline"], False),  # child filtered out
     ],
 )
 async def test_pipeline_commit_resolution(
     merge_request,
     ref_suffix,
     expected_commit,
+    pipeline_source,
+    check_types,
+    should_relay,
     base_pipeline_event,
     mock_gh,
     mock_gl,
     caplog,
 ):
-    """Should resolve correct commit SHA for different pipeline types."""
+    """Should resolve correct commit SHA and respect event type filters."""
+    base_pipeline_event["object_attributes"]["source"] = pipeline_source
     if merge_request:
         base_pipeline_event["merge_request"] = merge_request
         mock_gl.get_pipeline.return_value = {
@@ -126,36 +141,58 @@ async def test_pipeline_commit_resolution(
         }
 
     event = make_event(base_pipeline_event)
-    await pipeline_status_relay(event, mock_gh, mock_gl, "ci")
+    await pipeline_status_relay(event, mock_gh, mock_gl, "ci", check_types)
 
-    assert "Relayed pipeline status" in caplog.text
-    commit, name, _ = mock_gh.set_check_status.call_args[0][:3]
-    assert commit == expected_commit
-    assert name == "ci"
+    if should_relay:
+        assert "Relayed pipeline status" in caplog.text
+        commit, name, _ = mock_gh.set_check_status.call_args[0][:3]
+        assert commit == expected_commit
+        if pipeline_source == "parent_pipeline":
+            assert name.startswith("ci / ")
+        else:
+            assert name == "ci"
+    else:
+        mock_gh.set_check_status.assert_not_called()
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "ref,expected_commit",
+    "ref,expected_commit,job_status,check_types,pipeline_source,expected_name,should_relay",
     [
-        ("refs/heads/main", "test-sha"),
-        ("refs/merge-requests/1/head", "test-sha"),
-        ("refs/merge-requests/1/merge", "source"),
+        ("refs/heads/main", "test-sha", "success", ["jobs"], "", "ci / test-job", True),
+        ("refs/merge-requests/1/head", "test-sha", "success", ["jobs"], "", "ci / test-job", True),
+        ("refs/merge-requests/1/merge", "source", "success", ["jobs"], "", "ci / test-job", True),
+        ("refs/heads/main", "test-sha", "created", ["jobs"], "", "ci / test-job", False),  # unmapped
+        ("refs/heads/main", "test-sha", "success", ["child-pipelines"], "parent_pipeline", "ci / child-pipe / test-job", True),
+        ("refs/heads/main", "test-sha", "success", ["child-pipelines"], "", "ci / test-job", True),  # not child
+        ("refs/heads/main", "test-sha", "success", ["jobs"], "parent_pipeline", "ci / test-job", True),  # child not tracked
     ],
 )
 async def test_job_commit_resolution(
-    ref, expected_commit, base_job_event, mock_gh, mock_gl, caplog
+    ref, expected_commit, job_status, check_types, pipeline_source, expected_name, should_relay, base_job_event, mock_gh, mock_gl, caplog
 ):
-    """Should resolve correct commit SHA for different job types."""
+    """Should resolve correct commit SHA, respect status mapping, and handle child pipeline naming."""
     base_job_event["ref"] = ref
+    base_job_event["build_status"] = job_status
+    base_job_event["pipeline_id"] = 456
     event = make_event(base_job_event)
 
-    await job_status_relay(event, mock_gh, mock_gl, "ci")
+    mock_gl.get_pipeline.return_value = {
+        "ref": "refs/heads/main",
+        "source": pipeline_source,
+        "name": "child-pipe" if pipeline_source == "parent_pipeline" else None,
+    }
 
-    assert "Relayed job status" in caplog.text
-    commit, name, _ = mock_gh.set_check_status.call_args[0][:3]
-    assert commit == expected_commit
-    assert name == "ci / test-job"
+    await job_status_relay(event, mock_gh, mock_gl, "ci", check_types)
+
+    if should_relay:
+        assert "Relayed job status" in caplog.text
+        commit, name, _ = mock_gh.set_check_status.call_args[0][:3]
+        assert commit == expected_commit
+        assert name == expected_name
+    else:
+        mock_gh.set_check_status.assert_not_called()
+        assert "Skipped job status relay" in caplog.text
 
 
 @pytest.mark.asyncio

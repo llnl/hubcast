@@ -415,6 +415,7 @@ async def respond_pr_comment(
 
     # reviews without comments (plain approvals or RFC)
     if not comment:
+        log.info("Skipped comment - no command matched")
         return
 
     if re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
