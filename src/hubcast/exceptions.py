@@ -14,6 +14,8 @@ class HubcastError(Exception):
     def log(self, logger: logging.Logger, **extra_context) -> None:
         """Log this exception with its context and any extra info."""
         level = getattr(logging, self.log_level)
+        # Only include traceback for ERROR level and above
+        exc_info = self.log_level in ("ERROR", "CRITICAL")
         logger.log(
-            level, str(self), extra={**self.context, **extra_context}, exc_info=True
+            level, str(self), extra={**self.context, **extra_context}, exc_info=exc_info
         )

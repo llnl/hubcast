@@ -5,8 +5,6 @@ import aiohttp
 from gidgethub import HTTPException
 from gidgethub import aiohttp as gh_aiohttp
 
-from hubcast.exceptions import HubcastError
-
 from .auth import GitHubAuthenticator
 
 log = logging.getLogger(__name__)
@@ -122,7 +120,7 @@ class GitHubClient:
                 url = f"/repos/{self.repo_owner}/{self.repo_name}/check-runs/{existing_check['id']}"
                 await gh.patch(url, data=payload)
 
-    async def get_repo_config(self) -> str:
+    async def get_repo_config(self) -> str | None:
         gh_token = await self.auth.authenticate_installation(
             self.repo_owner, self.repo_name
         )
@@ -137,11 +135,8 @@ class GitHubClient:
                 return await gh.getitem(url, accept="application/vnd.github.raw")
             except HTTPException as exc:
                 if exc.status_code == 404:
-                    raise HubcastError(
-                        "Repo config file not found at .github/hubcast.yml",
-                        log_level="INFO",
-                        repo=f"{self.repo_owner}/{self.repo_name}",
-                    ) from None
+                    # the repo config was not found: the caller will handle this case
+                    return
                 # all others are unhandled
                 raise
 
