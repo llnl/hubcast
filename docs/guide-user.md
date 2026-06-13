@@ -4,7 +4,7 @@ This guide covers usage of Hubcast to sync repository state between Git forges.
 
 ## Initialization
 
-If you've set up a local instance of Hubcast or using it for the first time, we recommend setting up a test repository. To create a test repo on GitHub, click [here](https://github.com/new?name=hubcast-test). Next initialize a local repo on your computer.
+If you've set up a local instance of Hubcast or are using it for the first time, we recommend setting up a test repository. To create a test repo on GitHub, click [here](https://github.com/new?name=hubcast-test). Next, initialize a local repo on your computer.
 
 ```sh
 mkdir hubcast-test && cd hubcast-test
@@ -17,7 +17,7 @@ For Hubcast to function properly, the state of both source and destination repos
 
 ## Configuration
 
-Behavior specific to each repository can be configured via the `hubcast.yml` file. Create this file at `.github/hubcast.yml` in your repository:
+Hubcast settings for each repository are defined in the `hubcast.yml` file. Create this file at `.github/hubcast.yml` in your repository:
 
 ```yaml
 Repo:
