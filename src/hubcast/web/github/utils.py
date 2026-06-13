@@ -10,7 +10,7 @@ from hubcast.repos.config import RepoConfig
 log = logging.getLogger(__name__)
 
 # Shared cache for repository configs with 30-minute TTL
-config_cache: TTLCache[str, RepoConfig] = TTLCache(maxsize=1000, ttl=1800)
+config_cache: TTLCache[str, RepoConfig | None] = TTLCache(maxsize=1000, ttl=1800)
 
 
 async def get_repo_config(
