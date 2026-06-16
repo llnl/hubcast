@@ -2,7 +2,7 @@ def help_message(bot_caller: str) -> str:
     return f"""
 You can interact with me in many ways!
 
-- `{bot_caller} sync` or `approve`: 
+- `{bot_caller} approve`: 
     - Manually sync this PR to the destination repo
     - Hubcast will perform syncs and run pipelines on behalf of the commenter
 - `{bot_caller} run pipeline`: request a new run of the GitLab CI pipeline

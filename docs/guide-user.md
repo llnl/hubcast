@@ -131,7 +131,7 @@ Depending on the setup of your Hubcast installation, you can request assistance 
 
 The bot supports the following commands:
 - `@{bot} help` - Display available commands and usage information
-- `@{bot} sync` or `approve` - Sync this pull request to the destination forge and trigger a new pipeline (requires maintainer permissions)
+- `@{bot} approve` - Sync this pull request to the destination forge and trigger a new pipeline (requires maintainer permissions)
 - `@{bot} run pipeline` - Request a new run of the GitLab CI pipeline
 - `@{bot} restart failed jobs` - Restart any failed jobs in the latest CI pipeline
 
