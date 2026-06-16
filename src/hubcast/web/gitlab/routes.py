@@ -112,7 +112,6 @@ async def job_status_relay(
     gl: GitLabClient,
     gh_check_name: str,
     check_types: list,
-    neutral_allow_failure: bool,
     *args,
     **kwargs,
 ) -> None:
@@ -121,13 +120,10 @@ async def job_status_relay(
     status = GITLAB_TO_GITHUB_STATUS.get(job_status)
     check_title_suffix = ""
 
-    # if the job is allowed to fail, mark as neutral GitHub status
+    # if a job does not succeed and allow_failure is enabled in the job's GitLab definition,
+    # relay the job's GitHub status as "neutral"
     # we do this after the GL->GH status matching as GL does not have a neutral status
-    if (
-        neutral_allow_failure
-        and event.data.get("build_allow_failure")
-        and status == "failure"  # GH status
-    ):
+    if event.data.get("build_allow_failure") and status == "failure":  # GH status
         # neutral doesn't affect the failure
         status = "neutral"
         check_title_suffix = ": allowed to fail"
