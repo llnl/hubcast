@@ -87,7 +87,7 @@ class GitHubClient:
             payload["details_url"] = details_url
 
         # for success and failure status write out a conclusion
-        if status in ("skipped", "success", "failure", "cancelled"):
+        if status in ("skipped", "success", "failure", "cancelled", "neutral"):
             payload["status"] = "completed"
             payload["conclusion"] = status
         else:
