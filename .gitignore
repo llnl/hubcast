@@ -5,3 +5,4 @@ spack.lock
 *.pem
 build-*
 .test-users.yml
+.coverage

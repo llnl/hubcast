@@ -37,6 +37,7 @@ jobs:
             style:
               - '.github/**/*'
               - 'src/**/*'
+              - 'tests/**/*'
               - 'pyproject.toml'
             security:
               - '.github/**/*'
@@ -51,11 +52,11 @@ jobs:
             helm:
               - '.github/**/*'
               - 'helm/**/*'
-           # unit-tests:
-           #   - '.github/**/*'
-           #   - 'src/**/*'
-           #   - 'tests/**/*'
-           #   - 'pyproject.toml'
+            unit-tests:
+              - '.github/**/*'
+              - 'src/**/*'
+              - 'tests/**/*'
+              - 'pyproject.toml'
 
   style:
     if: needs.changes.outputs.style == 'true'
@@ -75,10 +76,12 @@ jobs:
       contents: read
       security-events: write
 
-  # unit-tests:
-  #   if: needs.changes.outputs.unit-tests == 'true'
-  #   needs: [changes, style]
-  #   uses: ./.github/workflows/unit-tests.yml
+  unit-tests:
+    if: needs.changes.outputs.unit-tests == 'true'
+    needs: [changes, style]
+    uses: ./.github/workflows/unit-tests.yml
+    permissions:
+      contents: read
 
   # coverage:
   #   if: needs.changes.outputs.unit-tests == 'true'
@@ -99,7 +102,7 @@ jobs:
      - style
      - style-helm
      - security
-     # - unit-tests
+     - unit-tests
      # - coverage
      - container
     if: always()

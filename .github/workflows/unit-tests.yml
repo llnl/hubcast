@@ -21,6 +21,14 @@ jobs:
             'pyproject.toml'
             '.github/workflows/requirements/unit-tests.txt'
 
+      - name: install python-ldap build dependencies
+        # https://www.python-ldap.org/en/latest/installing.html#build-prerequisites
+        # there are no wheels available, must build from source
+        # https://docs.github.com/en/actions/reference/runners/github-hosted-runners#administrative-privileges
+        # sudo apt-get update
+        run: |
+          sudo apt-get install -y build-essential ldap-utils libldap2-dev libsasl2-dev
+
       - name: Install Python dependencies
         run: |
           pip install .
