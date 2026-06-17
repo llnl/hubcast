@@ -83,10 +83,10 @@ jobs:
     permissions:
       contents: read
 
-  # coverage:
-  #   if: needs.changes.outputs.unit-tests == 'true'
-  #   needs: [changes, style, unit-tests]
-  #   uses: ./.github/workflows/coverage.yml
+  coverage:
+    if: needs.changes.outputs.unit-tests == 'true'
+    needs: [changes, style, unit-tests]
+    uses: ./.github/workflows/coverage.yml
 
   container:
     if: always() && needs.changes.outputs.container == 'true'
@@ -103,7 +103,7 @@ jobs:
      - style-helm
      - security
      - unit-tests
-     # - coverage
+     - coverage
      - container
     if: always()
     runs-on: ubuntu-latest
