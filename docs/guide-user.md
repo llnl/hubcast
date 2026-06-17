@@ -66,8 +66,11 @@ Repo:
 
 > [!TIP]
 > Hubcast will always search for its settings in the HEAD of the source repository's default branch.
+> 
 > This means that Hubcast won't perform any syncing on the initial PR used to add the configuration file. 
+> 
 > Also, if you open a PR to edit the Hubcast configuration file, those settings will propagate upon merging that PR (i.e., you cannot preview the settings change).
+> 
 > This restriction is in place for security purposes.
 
 If you'd like to test the CI job status syncing, add a job in `.gitlab-ci.yml`.
