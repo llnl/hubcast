@@ -67,9 +67,9 @@ Repo:
 > [!TIP]
 > Hubcast will always search for its settings in the HEAD of the source repository's default branch.
 > 
-> This means that Hubcast won't perform any syncing on the initial PR used to add the configuration file. 
+> This means that Hubcast won't perform syncing on the initial PR used to add the configuration file. 
 > 
-> Also, if you open a PR to edit the Hubcast configuration file, those settings will propagate upon merging that PR (i.e., you cannot preview the settings change).
+> Also, if you open a PR to edit the Hubcast configuration file, you will not be able to preview the settings change in the PR web view.
 > 
 > This restriction is in place for security purposes.
 
