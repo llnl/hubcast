@@ -64,7 +64,11 @@ Repo:
   dest_name: hubcast-test
 ```
 
-Note: Hubcast will search for these settings in the HEAD of the source repository's default branch.
+> [!TIP]
+> Hubcast will always search for its settings in the HEAD of the source repository's default branch.
+> This means that Hubcast won't perform any syncing on the initial PR used to add the configuration file. 
+> Also, if you open a PR to edit the Hubcast configuration file, those settings will propagate upon merging that PR (i.e., you cannot preview the settings change).
+> This restriction is in place for security purposes.
 
 If you'd like to test the CI job status syncing, add a job in `.gitlab-ci.yml`.
 
@@ -83,7 +87,9 @@ git remote add gh git@github.com:example/hubcast-test.git
 git push gh main
 ```
 
-While unlikely, ensure that your destination repository is never "ahead" of the source repository (i.e., has newer commits); Hubcast will fail to sync in this case.
+To avoid issues with Hubcast syncing:
+- Allow force pushes on the destination repository for all branches.
+- Ensure that the destination does not diverge from the source repository. This is unlikely, but can happen accidentally.
 
 ## Installation
 
