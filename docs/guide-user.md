@@ -2,22 +2,11 @@
 
 This guide covers usage of Hubcast to sync repository state between Git forges.
 
-## Initialization
-
-If you've set up a local instance of Hubcast or using it for the first time, we recommend setting up a test repository. To create a test repo on GitHub, click [here](https://github.com/new?name=hubcast-test). Next initialize a local repo on your computer.
-
-```sh
-mkdir hubcast-test && cd hubcast-test
-git init .
-```
-
-If you haven't already, create a repository on the destination forge (like GitLab.com).
-
-For Hubcast to function properly, the state of both source and destination repos need to be identical before any syncing can occur.
+First, identify the source and destination repositories Hubcast will be syncing.
 
 ## Configuration
 
-Behavior specific to each repository can be configured via the `hubcast.yml` file. Create this file at `.github/hubcast.yml` in your repository:
+Hubcast settings for each repository are defined in the `hubcast.yml` file. Create this file at `.github/hubcast.yml` in your GitHub repository:
 
 ```yaml
 Repo:
@@ -64,25 +53,16 @@ Repo:
   dest_name: hubcast-test
 ```
 
-Note: Hubcast will search for these settings in the HEAD of the source repository's default branch.
+> [!TIP]
+> Hubcast will always search for its settings in the HEAD of the source repository's default branch.
+> 
+> This means that Hubcast won't perform syncing on the initial PR used to add the configuration file. 
+> 
+> Also, if you open a PR to edit the Hubcast configuration file, you will not be able to preview the settings change in the PR web view.
+> 
+> This restriction is in place for security purposes.
 
-If you'd like to test the CI job status syncing, add a job in `.gitlab-ci.yml`.
-
-```yaml
-build-job:
-  stage: build
-  script:
-    - echo "Hello, $GITLAB_USER_LOGIN!"
-```
-
-To ensure the source and destination repos have the same state, commit the changes and push to the two remotes:
-
-```sh
-git add . && git commit -m "init"
-git remote add gh git@github.com:example/hubcast-test.git
-git remote add gl git@gitlab.com:example/hubcast-test.git
-git push gh main && git push gl main
-```
+Hubcast will sync changes via a force push if there has been a local change to the destination repository. To avoid issues, you may wish to disable the default force push branch protection rules on the destination repository.
 
 ## Installation
 
@@ -137,7 +117,7 @@ The bot supports the following commands:
 Replace `@{bot}` with your instance's bot user (e.g., `@lc-hubcast`) or use `/hubcast` if no bot user is configured.
 
 #### Approval
-To securely sync commits from external collaborators, approvals require links to a commit hash. You can comment your approval on a PR review:
+To securely sync commits from external collaborators, approvals must be done via commenting on a PR review, ensuring that the approval is linked to a specific commit.
 
 ![A GitHub pull request review; the user has written a comment `@lc-hubcast approve` to sync the user's contributions.](/docs/img/approve-comment.png)
 

@@ -471,10 +471,10 @@ async def respond_comment(
 
     elif re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
         response = (
-            "To approve the sync of this PR, please use the "
+            "To approve syncing this PR, please use the "
             "[GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#approval) "
-            "to submit an approval. This ensures the approval is tied to a specific "
-            "commit to avoid unintended syncing of malicious commits."
+            "to submit an approval. This ensures approval is tied to a specific "
+            "commit to avoid the sync of malicious data."
         )
         log.info("Approval reminder sent")
         action_logged = True

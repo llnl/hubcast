@@ -67,6 +67,42 @@ Note that you will need to set up two channels: one for the source webhook handl
 smee -u https://smee.io/HASH -t http://localhost:8080/v1/events/src/github
 ```
 
+To set up a test repository, create a repo on GitHub.com and your destination GitLab forge.
+
+Initialize the local repo:
+
+```sh
+mkdir hubcast-test && cd hubcast-test
+git init .
+```
+
+To test CI job status syncing, add a job in `.gitlab-ci.yml`:
+
+```yaml
+build-job:
+  stage: build
+  script:
+    - echo "Hello, $GITLAB_USER_LOGIN!"
+```
+
+Add a minimal configuration to `.github/hubcast.yml`:
+
+```yaml
+Repo:
+  dest_org: example
+  dest_name: hubcast-test
+```
+
+Commit the changes and push to the source repository:
+
+```sh
+git add . && git commit -m "init"
+git remote add gh git@github.com:example/hubcast-test.git
+git push gh main
+```
+
+Hubcast will now sync automatically to the destination!
+
 ## Development Tasks
 
 ### Account Maps
