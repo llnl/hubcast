@@ -90,7 +90,7 @@ git remote add gh git@github.com:example/hubcast-test.git
 git push gh main
 ```
 
-Hubcast will sync changes via a force push if there has been a local change to the destination repository. To avoid issues, disable force push protection rules on the destination repository.
+Hubcast will sync changes via a force push if there has been a local change to the destination repository. To avoid issues, you may wish to disable the default force push branch protection rules on the destination repository.
 
 ## Installation
 
