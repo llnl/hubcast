@@ -6,7 +6,7 @@ First, identify the source and destination repositories Hubcast will be syncing.
 
 ## Configuration
 
-Hubcast settings for each repository are defined in the `hubcast.yml` file. Create this file at `.github/hubcast.yml` in your repository:
+Hubcast settings for each repository are defined in the `hubcast.yml` file. Create this file at `.github/hubcast.yml` in your GitHub repository:
 
 ```yaml
 Repo:
