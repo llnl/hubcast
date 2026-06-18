@@ -111,5 +111,3 @@ Account maps are used by Hubcast to link user accounts between Git forges. Hubca
 To write your own account mapper, see the abstract base class in [`src/hubcast/account_map/abc.py`](/src/hubcast/account_map/abc.py) and current implementations in the `account_map` directory.
 
 The basic idea is to define an input (a file, metadata from a webhook) where the initiating user is identified, along a way to link that user's identity to an account on the destination forge.
-
-
