@@ -11,5 +11,7 @@ You can interact with me in many ways!
 
 If you are an outside contributor, a maintainer will need to approve your commits using the [GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#approval).
 
+A [user guide](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md) is available for additional details on Hubcast's functionality.
+
 For assistance and bug reports, open an issue [here](https://github.com/llnl/hubcast/issues).
 """

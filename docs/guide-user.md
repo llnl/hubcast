@@ -90,9 +90,7 @@ git remote add gh git@github.com:example/hubcast-test.git
 git push gh main
 ```
 
-To avoid issues with Hubcast syncing:
-- Allow force pushes on the destination repository for all branches.
-- Ensure that the destination does not diverge from the source repository. This is unlikely, but can happen accidentally.
+Hubcast will sync changes via a force push if there has been a local change to the destination repository. To avoid issues, disable force push protection rules on the destination repository.
 
 ## Installation
 
