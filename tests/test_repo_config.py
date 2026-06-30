@@ -148,3 +148,31 @@ async def test_get_repo_config_missing_required_fields():
 
     with pytest.raises(HubcastError, match="Field required"):
         await get_repo_config(gh, "owner/repo")
+
+
+@pytest.mark.asyncio
+async def test_get_repo_config_not_found_from_github():
+    """Test handling when config file is not found on GitHub."""
+    gh = AsyncMock()
+    gh.get_repo_config = AsyncMock(return_value=None)
+
+    with pytest.raises(HubcastError, match="Repo config file not found"):
+        await get_repo_config(gh, "owner/repo")
+
+
+@pytest.mark.asyncio
+async def test_get_repo_config_not_found_from_cache():
+    """Test handling when cached config is None."""
+    gh = AsyncMock()
+    gh.get_repo_config = AsyncMock(return_value=None)
+
+    # first call caches None
+    with pytest.raises(HubcastError, match="Repo config file not found"):
+        await get_repo_config(gh, "owner/repo")
+
+    # second call should discover cache has None
+    with pytest.raises(HubcastError, match="Config file not found"):
+        await get_repo_config(gh, "owner/repo")
+
+    # should only call GH once since second call used cache
+    gh.get_repo_config.assert_called_once()
