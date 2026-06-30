@@ -56,6 +56,13 @@ class GitHubHandler:
                 src_repo_name=gh_repo_name,
             )
 
+            # proper PR events
+            if pr := event.data.get("pull_request"):
+                update_log_context(pull_request_id=pr["number"])
+            # PRs masquerading as issues
+            elif (issue := event.data.get("issue")) and "pull_request" in issue:
+                update_log_context(pull_request_id=issue["number"])
+
             gitlab_user = self.account_map(github_user)
 
             if gitlab_user is None:
