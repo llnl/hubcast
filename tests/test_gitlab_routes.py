@@ -279,3 +279,22 @@ async def test_router_hubcast_error_handling():
 
     await router.dispatch(event)
     callback.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_job_allow_failure_neutral_status(base_job_event, mock_gh, mock_gl):
+    """Should set status to neutral when job fails but allow_failure is enabled."""
+    base_job_event["build_status"] = "failed"
+    base_job_event["build_allow_failure"] = True
+    event = make_event(base_job_event)
+
+    await job_status_relay(event, mock_gh, mock_gl, "ci", ["jobs"])
+
+    # should call set_check_status with neutral status
+    commit, _, status = mock_gh.set_check_status.call_args[0][:3]
+    assert status == "neutral"
+    assert commit == "test-sha"
+
+    # check title includes allowed failure message
+    kwargs = mock_gh.set_check_status.call_args[1]
+    assert "allowed to fail" in kwargs["title"]
