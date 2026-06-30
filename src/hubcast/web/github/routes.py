@@ -80,6 +80,7 @@ async def sync_branch(
             gh_check=repo_config.check_name,
             check_types=repo_config.check_types,
         )
+        log.info("Updated GitLab webhook", extra={"dest_fullname": dest_fullname})
 
     # sync commits from GitHub -> GitLab
     gl_token = await gl.auth.authenticate_user(gl_user)
@@ -91,7 +92,10 @@ async def sync_branch(
     if want_sha in have_shas:
         log.info(
             "Skipped branch sync - already up-to-date",
-            extra={"ref": sync_ref},
+            extra={
+                "ref": sync_ref,
+                "want_sha": want_sha,
+            },
         )
         return
 
@@ -174,7 +178,13 @@ async def remove_branch(
         password=gl_token,
     )
 
-    log.info("Deleted branch", extra={"ref": sync_ref})
+    log.info(
+        "Deleted branch",
+        extra={
+            "ref": sync_ref,
+            "head_sha": head_sha,
+        },
+    )
 
 
 # -----------------------------------
@@ -233,7 +243,9 @@ async def sync_pr(
                 status="skipped",
                 title="Hubcast disables sync for draft PRs.",
             )
-        log.info("Skipped PR sync - draft PR")
+        log.info(
+            "Skipped PR sync - draft PR", extra={"pull_request_id": pull_request_id}
+        )
         return
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
@@ -247,7 +259,11 @@ async def sync_pr(
     if want_sha in have_shas:
         log.info(
             "Skipped PR sync - already up-to-date",
-            extra={"ref": sync_ref},
+            extra={
+                "ref": sync_ref,
+                "want_sha": want_sha,
+                "pull_request_id": pull_request_id,
+            },
         )
     else:  # needs sync
         if is_pull_request_fork and not src_repo_private:
@@ -277,6 +293,7 @@ async def sync_pr(
                 "ref": sync_ref,
                 "from_sha": from_sha,
                 "want_sha": want_sha,
+                "pull_request_id": pull_request_id,
             },
         )
         await send_pack(
@@ -295,6 +312,7 @@ async def sync_pr(
                 "ref": sync_ref,
                 "from_sha": from_sha,
                 "sha": want_sha,
+                "pull_request_id": pull_request_id,
             },
         )
 
@@ -309,7 +327,13 @@ async def sync_pr(
             ref_title=pull_request["title"],
             ref_url=pull_request["html_url"],
         )
-        log.info("Created MR", extra={"branch": sync_branch})
+        log.info(
+            "Created MR",
+            extra={
+                "branch": sync_branch,
+                "pull_request_id": pull_request_id,
+            },
+        )
 
 
 @router.register("pull_request", action="opened")
@@ -353,6 +377,7 @@ async def remove_pr(
     **kwargs,
 ) -> None:
     pull_request = event.data["pull_request"]
+    pull_request_id = pull_request["number"]
     src_fullname = pull_request["head"]["repo"]["full_name"]
     base_fullname = pull_request["base"]["repo"]["full_name"]
 
@@ -360,7 +385,10 @@ async def remove_pr(
     repo_config, _ = await get_repo_config(gh, base_fullname)
 
     if not repo_config.delete_closed:
-        log.info("Skipped PR branch removal - delete_closed disabled")
+        log.info(
+            "Skipped PR branch removal - delete_closed disabled",
+            extra={"pull_request_id": pull_request_id},
+        )
         return
 
     # if the pull request comes from a fork we should clean up
@@ -370,10 +398,11 @@ async def remove_pr(
     # internal repository
     is_pull_request_fork = src_fullname != base_fullname
     if not is_pull_request_fork:
-        log.info("Skipped PR branch removal - internal branch")
+        log.info(
+            "Skipped PR branch removal - internal branch",
+            extra={"pull_request_id": pull_request_id},
+        )
         return
-
-    pull_request_id = pull_request["number"]
     sync_ref = f"refs/heads/pr-{pull_request_id}"
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
@@ -383,12 +412,24 @@ async def remove_pr(
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     head_sha = gl_refs.get(sync_ref)
     if head_sha is None:
-        log.info("Skipped PR branch removal - ref not found", extra={"ref": sync_ref})
+        log.info(
+            "Skipped PR branch removal - ref not found",
+            extra={
+                "ref": sync_ref,
+                "pull_request_id": pull_request_id,
+            },
+        )
         return
 
     null_sha = "0" * 40
 
-    log.info("Deleting PR branch", extra={"ref": sync_ref})
+    log.info(
+        "Deleting PR branch",
+        extra={
+            "ref": sync_ref,
+            "pull_request_id": pull_request_id,
+        },
+    )
     await send_pack(
         dest_remote_url,
         sync_ref,
@@ -399,7 +440,13 @@ async def remove_pr(
         password=gl_token,
     )
 
-    log.info("Deleted PR branch", extra={"ref": sync_ref})
+    log.info(
+        "Deleted PR branch",
+        extra={
+            "ref": sync_ref,
+            "pull_request_id": pull_request_id,
+        },
+    )
 
 
 @router.register("pull_request_review", action="submitted")
@@ -439,7 +486,11 @@ async def respond_pr_comment(
         await gh.react_to_comment(event.data["review"]["node_id"], "+1")
 
         log.info(
-            "Mirrored ref with approval from review comment", extra={"ref": commit_sha}
+            "Mirrored ref with approval from review comment",
+            extra={
+                "ref": commit_sha,
+                "pull_request_id": pull_request["number"],
+            },
         )
     else:
         log.info("Skipped PR review comment - no command matched")
@@ -511,11 +562,23 @@ async def respond_comment(
         if pipeline_url:
             response = f"I've started a new [pipeline]({pipeline_url}) for you!"
             plus_one = True
-            log.info("Pipeline started for branch", extra={"branch": branch})
+            log.info(
+                "Pipeline started for branch",
+                extra={
+                    "branch": branch,
+                    "pull_request_id": pull_request_id,
+                },
+            )
             action_logged = True
         else:
             response = "I had a problem starting the pipeline."
-            log.info("Pipeline failed to start for branch", extra={"branch": branch})
+            log.info(
+                "Pipeline failed to start for branch",
+                extra={
+                    "branch": branch,
+                    "pull_request_id": pull_request_id,
+                },
+            )
             action_logged = True
 
     elif re.search(
@@ -552,15 +615,33 @@ async def respond_comment(
                     f"I've retried any failed jobs in the [pipeline]({pipeline_url})!"
                 )
                 plus_one = True
-                log.info("Jobs restarted for branch", extra={"branch": branch})
+                log.info(
+                    "Jobs restarted for branch",
+                    extra={
+                        "branch": branch,
+                        "pull_request_id": pull_request_id,
+                    },
+                )
                 action_logged = True
             else:
                 response = "I had a problem retrying jobs in the pipeline."
-                log.info("Jobs restart failed for branch", extra={"branch": branch})
+                log.info(
+                    "Jobs restart failed for branch",
+                    extra={
+                        "branch": branch,
+                        "pull_request_id": pull_request_id,
+                    },
+                )
                 action_logged = True
         else:
             response = "No pipeline exists."
-            log.info("No pipeline found for branch", extra={"branch": branch})
+            log.info(
+                "No pipeline found for branch",
+                extra={
+                    "branch": branch,
+                    "pull_request_id": pull_request_id,
+                },
+            )
             action_logged = True
 
     if response:
@@ -596,7 +677,14 @@ async def rerun_check(
 
     # only rerun if this commit is the head of the branch
     if check_run_commit != latest_commit:
-        log.info("Skipped check rerun - old commit")
+        log.info(
+            "Skipped check rerun - old commit",
+            extra={
+                "branch": branch,
+                "check_run_commit": check_run_commit,
+                "latest_commit": latest_commit,
+            },
+        )
         return
 
     # get the GL repo info and run the pipeline
@@ -604,4 +692,10 @@ async def rerun_check(
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     await gl.run_pipeline(dest_fullname, branch)
 
-    log.info("Rerun check requested for branch", extra={"branch": branch})
+    log.info(
+        "Rerun check requested for branch",
+        extra={
+            "branch": branch,
+            "check_run_commit": check_run_commit,
+        },
+    )
