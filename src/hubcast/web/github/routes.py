@@ -91,6 +91,7 @@ async def sync_branch(
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     have_shas = set(gl_refs.values())
     from_sha = gl_refs.get(sync_ref) or ("0" * 40)
+
     update_log_context(from_sha=from_sha, want_sha=want_sha)
 
     if want_sha in have_shas:
