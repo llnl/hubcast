@@ -54,6 +54,7 @@ async def sync_branch(
     # the commit the push event is referencing
     want_sha = event.data["after"]
     sync_ref = event.data["ref"]
+
     update_log_context(ref=sync_ref)
 
     # skip branches from push events that are also pull requests
@@ -90,21 +91,13 @@ async def sync_branch(
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     have_shas = set(gl_refs.values())
     from_sha = gl_refs.get(sync_ref) or ("0" * 40)
+    update_log_context(from_sha=from_sha, want_sha=want_sha)
 
     if want_sha in have_shas:
-        log.info(
-            "Skipped branch sync - already up-to-date",
-            extra={"want_sha": want_sha},
-        )
+        log.info("Skipped branch sync - already up-to-date")
         return
 
-    log.info(
-        "Syncing branch",
-        extra={
-            "from_sha": from_sha,
-            "want_sha": want_sha,
-        },
-    )
+    log.info("Syncing branch")
 
     gh_token = await gh.auth.authenticate_installation(gh.repo_owner, gh.repo_name)
 
@@ -126,13 +119,7 @@ async def sync_branch(
         password=gl_token,
     )
 
-    log.info(
-        "Synced branch",
-        extra={
-            "from_sha": from_sha,
-            "want_sha": want_sha,
-        },
-    )
+    log.info("Synced branch")
 
 
 @router.register("push", deleted=True)
@@ -157,13 +144,15 @@ async def remove_branch(
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     head_sha = gl_refs.get(sync_ref)
 
+    update_log_context(ref=sync_ref, head_sha=head_sha)
+
     if head_sha is None:
-        log.info("Skipped branch removal - ref not found", extra={"ref": sync_ref})
+        log.info("Skipped branch removal - ref not found")
         return
 
     null_sha = "0" * 40
 
-    log.info("Deleting branch", extra={"ref": sync_ref})
+    log.info("Deleting branch")
 
     await send_pack(
         dest_remote_url,
@@ -175,13 +164,7 @@ async def remove_branch(
         password=gl_token,
     )
 
-    log.info(
-        "Deleted branch",
-        extra={
-            "ref": sync_ref,
-            "head_sha": head_sha,
-        },
-    )
+    log.info("Deleted branch")
 
 
 # -----------------------------------
@@ -219,6 +202,8 @@ async def sync_pr(
 
     sync_ref = f"refs/heads/{sync_branch}"
 
+    update_log_context(ref=sync_ref)
+
     if is_pull_request_fork and src_repo_private:
         # GitHub apps will not have access to private forks
         log.warning(
@@ -247,15 +232,10 @@ async def sync_pr(
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     have_shas = set(gl_refs.values())
     from_sha = gl_refs.get(sync_ref) or ("0" * 40)
+    update_log_context(from_sha=from_sha, want_sha=want_sha)
 
     if want_sha in have_shas:
-        log.info(
-            "Skipped PR sync - already up-to-date",
-            extra={
-                "ref": sync_ref,
-                "want_sha": want_sha,
-            },
-        )
+        log.info("Skipped PR sync - already up-to-date")
     else:  # needs sync
         if is_pull_request_fork and not src_repo_private:
             # no auth needed for public forks
@@ -278,14 +258,7 @@ async def sync_pr(
         )
 
         # upload packfile to gitlab repository
-        log.info(
-            "Syncing PR",
-            extra={
-                "ref": sync_ref,
-                "from_sha": from_sha,
-                "want_sha": want_sha,
-            },
-        )
+        log.info("Syncing PR")
         await send_pack(
             dest_remote_url,
             sync_ref,
@@ -296,14 +269,7 @@ async def sync_pr(
             password=gl_token,
         )
 
-        log.info(
-            "Synced PR",
-            extra={
-                "ref": sync_ref,
-                "from_sha": from_sha,
-                "sha": want_sha,
-            },
-        )
+        log.info("Synced PR")
 
     # skip already created MRs
     if repo_config.create_mr and not await gl.get_mr(
@@ -382,6 +348,8 @@ async def remove_pr(
         return
     sync_ref = f"refs/heads/pr-{pull_request_id}"
 
+    update_log_context(ref=sync_ref)
+
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
     gl_token = await gl.auth.authenticate_user(gl_user)
@@ -389,12 +357,12 @@ async def remove_pr(
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     head_sha = gl_refs.get(sync_ref)
     if head_sha is None:
-        log.info("Skipped PR branch removal - ref not found", extra={"ref": sync_ref})
+        log.info("Skipped PR branch removal - ref not found")
         return
 
     null_sha = "0" * 40
 
-    log.info("Deleting PR branch", extra={"ref": sync_ref})
+    log.info("Deleting PR branch")
     await send_pack(
         dest_remote_url,
         sync_ref,
@@ -405,7 +373,7 @@ async def remove_pr(
         password=gl_token,
     )
 
-    log.info("Deleted PR branch", extra={"ref": sync_ref})
+    log.info("Deleted PR branch")
 
 
 @router.register("pull_request_review", action="submitted")
@@ -508,6 +476,7 @@ async def respond_comment(
             branch = f"pr-{pull_request_id}"
         else:
             branch = pull_request["head"]["ref"]
+
         update_log_context(branch=branch)
 
         # get the gitlab repo information and run the pipeline
@@ -545,6 +514,7 @@ async def respond_comment(
             branch = f"pr-{pull_request_id}"
         else:
             branch = pull_request["head"]["ref"]
+
         update_log_context(branch=branch)
 
         # get the gitlab repo information and run the pipeline
