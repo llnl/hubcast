@@ -56,6 +56,15 @@ class GitHubHandler:
                 src_repo_name=gh_repo_name,
             )
 
+            # events that relate to a pull request
+            # (e.g. pull_request, review_comment, etc...)
+            if pr := event.data.get("pull_request"):
+                update_log_context(pull_request_id=pr["number"])
+            # events that relate to pull requests and use the issues backend
+            # (e.g. issue_comment events for comments on a PR)
+            elif (issue := event.data.get("issue")) and "pull_request" in issue:
+                update_log_context(pull_request_id=issue["number"])
+
             gitlab_user = self.account_map(github_user)
 
             if gitlab_user is None:

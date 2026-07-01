@@ -8,6 +8,7 @@ from repligit.asyncio import fetch_pack, ls_remote, send_pack
 from hubcast.clients.github.client import GitHubClient
 from hubcast.clients.gitlab.client import GitLabClient
 from hubcast.exceptions import HubcastError
+from hubcast.logging import update_log_context
 from hubcast.web import comments
 from hubcast.web.github.utils import get_repo_config
 
@@ -54,9 +55,11 @@ async def sync_branch(
     want_sha = event.data["after"]
     sync_ref = event.data["ref"]
 
+    update_log_context(ref=sync_ref)
+
     # skip branches from push events that are also pull requests
     if await gh.get_prs(branch=sync_ref):
-        log.info("Skipped branch sync - branch has open PR", extra={"ref": sync_ref})
+        log.info("Skipped branch sync - branch has open PR")
         return
 
     # only refresh config on default branch pushes (where .github/hubcast.yml lives)
@@ -80,6 +83,7 @@ async def sync_branch(
             gh_check=repo_config.check_name,
             check_types=repo_config.check_types,
         )
+        log.info("Updated GitLab webhook", extra={"dest_fullname": dest_fullname})
 
     # sync commits from GitHub -> GitLab
     gl_token = await gl.auth.authenticate_user(gl_user)
@@ -88,21 +92,13 @@ async def sync_branch(
     have_shas = set(gl_refs.values())
     from_sha = gl_refs.get(sync_ref) or ("0" * 40)
 
+    update_log_context(from_sha=from_sha, want_sha=want_sha)
+
     if want_sha in have_shas:
-        log.info(
-            "Skipped branch sync - already up-to-date",
-            extra={"ref": sync_ref},
-        )
+        log.info("Skipped branch sync - already up-to-date")
         return
 
-    log.info(
-        "Syncing branch",
-        extra={
-            "ref": sync_ref,
-            "from_sha": from_sha,
-            "want_sha": want_sha,
-        },
-    )
+    log.info("Syncing branch")
 
     gh_token = await gh.auth.authenticate_installation(gh.repo_owner, gh.repo_name)
 
@@ -124,14 +120,7 @@ async def sync_branch(
         password=gl_token,
     )
 
-    log.info(
-        "Synced branch",
-        extra={
-            "ref": sync_ref,
-            "from_sha": from_sha,
-            "want_sha": want_sha,
-        },
-    )
+    log.info("Synced branch")
 
 
 @router.register("push", deleted=True)
@@ -156,13 +145,15 @@ async def remove_branch(
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     head_sha = gl_refs.get(sync_ref)
 
+    update_log_context(ref=sync_ref, head_sha=head_sha)
+
     if head_sha is None:
-        log.info("Skipped branch removal - ref not found", extra={"ref": sync_ref})
+        log.info("Skipped branch removal - ref not found")
         return
 
     null_sha = "0" * 40
 
-    log.info("Deleting branch", extra={"ref": sync_ref})
+    log.info("Deleting branch")
 
     await send_pack(
         dest_remote_url,
@@ -174,7 +165,7 @@ async def remove_branch(
         password=gl_token,
     )
 
-    log.info("Deleted branch", extra={"ref": sync_ref})
+    log.info("Deleted branch")
 
 
 # -----------------------------------
@@ -212,14 +203,13 @@ async def sync_pr(
 
     sync_ref = f"refs/heads/{sync_branch}"
 
+    update_log_context(ref=sync_ref)
+
     if is_pull_request_fork and src_repo_private:
         # GitHub apps will not have access to private forks
         log.warning(
             "Skipped PR sync - private fork",
-            extra={
-                "pull_request_id": pull_request_id,
-                "fork_fullname": pull_request["head"]["repo"]["full_name"],
-            },
+            extra={"fork_fullname": pull_request["head"]["repo"]["full_name"]},
         )
         return
 
@@ -243,12 +233,10 @@ async def sync_pr(
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     have_shas = set(gl_refs.values())
     from_sha = gl_refs.get(sync_ref) or ("0" * 40)
+    update_log_context(from_sha=from_sha, want_sha=want_sha)
 
     if want_sha in have_shas:
-        log.info(
-            "Skipped PR sync - already up-to-date",
-            extra={"ref": sync_ref},
-        )
+        log.info("Skipped PR sync - already up-to-date")
     else:  # needs sync
         if is_pull_request_fork and not src_repo_private:
             # no auth needed for public forks
@@ -271,14 +259,7 @@ async def sync_pr(
         )
 
         # upload packfile to gitlab repository
-        log.info(
-            "Syncing PR",
-            extra={
-                "ref": sync_ref,
-                "from_sha": from_sha,
-                "want_sha": want_sha,
-            },
-        )
+        log.info("Syncing PR")
         await send_pack(
             dest_remote_url,
             sync_ref,
@@ -289,14 +270,7 @@ async def sync_pr(
             password=gl_token,
         )
 
-        log.info(
-            "Synced PR",
-            extra={
-                "ref": sync_ref,
-                "from_sha": from_sha,
-                "sha": want_sha,
-            },
-        )
+        log.info("Synced PR")
 
     # skip already created MRs
     if repo_config.create_mr and not await gl.get_mr(
@@ -353,6 +327,7 @@ async def remove_pr(
     **kwargs,
 ) -> None:
     pull_request = event.data["pull_request"]
+    pull_request_id = pull_request["number"]
     src_fullname = pull_request["head"]["repo"]["full_name"]
     base_fullname = pull_request["base"]["repo"]["full_name"]
 
@@ -372,9 +347,9 @@ async def remove_pr(
     if not is_pull_request_fork:
         log.info("Skipped PR branch removal - internal branch")
         return
-
-    pull_request_id = pull_request["number"]
     sync_ref = f"refs/heads/pr-{pull_request_id}"
+
+    update_log_context(ref=sync_ref)
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
@@ -383,12 +358,12 @@ async def remove_pr(
     gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     head_sha = gl_refs.get(sync_ref)
     if head_sha is None:
-        log.info("Skipped PR branch removal - ref not found", extra={"ref": sync_ref})
+        log.info("Skipped PR branch removal - ref not found")
         return
 
     null_sha = "0" * 40
 
-    log.info("Deleting PR branch", extra={"ref": sync_ref})
+    log.info("Deleting PR branch")
     await send_pack(
         dest_remote_url,
         sync_ref,
@@ -399,7 +374,7 @@ async def remove_pr(
         password=gl_token,
     )
 
-    log.info("Deleted PR branch", extra={"ref": sync_ref})
+    log.info("Deleted PR branch")
 
 
 @router.register("pull_request_review", action="submitted")
@@ -503,6 +478,8 @@ async def respond_comment(
         else:
             branch = pull_request["head"]["ref"]
 
+        update_log_context(branch=branch)
+
         # get the gitlab repo information and run the pipeline
         repo_config, _ = await get_repo_config(gh, base_fullname)
         dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
@@ -511,11 +488,11 @@ async def respond_comment(
         if pipeline_url:
             response = f"I've started a new [pipeline]({pipeline_url}) for you!"
             plus_one = True
-            log.info("Pipeline started for branch", extra={"branch": branch})
+            log.info("Pipeline started for branch")
             action_logged = True
         else:
             response = "I had a problem starting the pipeline."
-            log.info("Pipeline failed to start for branch", extra={"branch": branch})
+            log.info("Pipeline failed to start for branch")
             action_logged = True
 
     elif re.search(
@@ -539,6 +516,8 @@ async def respond_comment(
         else:
             branch = pull_request["head"]["ref"]
 
+        update_log_context(branch=branch)
+
         # get the gitlab repo information and run the pipeline
         repo_config, _ = await get_repo_config(gh, base_fullname)
         dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
@@ -552,15 +531,15 @@ async def respond_comment(
                     f"I've retried any failed jobs in the [pipeline]({pipeline_url})!"
                 )
                 plus_one = True
-                log.info("Jobs restarted for branch", extra={"branch": branch})
+                log.info("Jobs restarted for branch")
                 action_logged = True
             else:
                 response = "I had a problem retrying jobs in the pipeline."
-                log.info("Jobs restart failed for branch", extra={"branch": branch})
+                log.info("Jobs restart failed for branch")
                 action_logged = True
         else:
             response = "No pipeline exists."
-            log.info("No pipeline found for branch", extra={"branch": branch})
+            log.info("No pipeline found for branch")
             action_logged = True
 
     if response:
@@ -596,7 +575,14 @@ async def rerun_check(
 
     # only rerun if this commit is the head of the branch
     if check_run_commit != latest_commit:
-        log.info("Skipped check rerun - old commit")
+        log.info(
+            "Skipped check rerun - old commit",
+            extra={
+                "branch": branch,
+                "check_run_commit": check_run_commit,
+                "latest_commit": latest_commit,
+            },
+        )
         return
 
     # get the GL repo info and run the pipeline
@@ -604,4 +590,10 @@ async def rerun_check(
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     await gl.run_pipeline(dest_fullname, branch)
 
-    log.info("Rerun check requested for branch", extra={"branch": branch})
+    log.info(
+        "Rerun check requested for branch",
+        extra={
+            "branch": branch,
+            "check_run_commit": check_run_commit,
+        },
+    )

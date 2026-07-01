@@ -486,9 +486,8 @@ async def test_sync_pr_opened_uses_head_sha(
     await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
     assert "Synced PR" in caplog.text
-    # Verify the sha was logged in the extra fields
     assert any(
-        hasattr(record, "sha") and record.sha == "head-sha-456"
+        hasattr(record, "want_sha") and record.want_sha == "head-sha-456"
         for record in caplog.records
     )
 
