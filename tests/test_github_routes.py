@@ -235,22 +235,14 @@ def setup_pr_mocks(mock_gh, mock_repligit_ops):
 def setup_pipeline_mocks(mock_gl):
     """Configure mocks for pipeline operations."""
 
-    def _setup(run_success=True, pipeline_exists=True, retry_success=True):
-        if run_success:
-            mock_gl.run_pipeline = AsyncMock(
-                return_value="https://gitlab.com/pipeline/123"
-            )
-        else:
-            mock_gl.run_pipeline = AsyncMock(return_value=None)
+    def _setup(pipeline_exists=True):
+        mock_gl.run_pipeline = AsyncMock(return_value="https://gitlab.com/pipeline/123")
 
         if pipeline_exists:
             mock_gl.get_latest_pipeline = AsyncMock(return_value=789)
-            if retry_success:
-                mock_gl.retry_pipeline_jobs = AsyncMock(
-                    return_value="https://gitlab.com/pipeline/789"
-                )
-            else:
-                mock_gl.retry_pipeline_jobs = AsyncMock(return_value=None)
+            mock_gl.retry_pipeline_jobs = AsyncMock(
+                return_value="https://gitlab.com/pipeline/789"
+            )
         else:
             mock_gl.get_latest_pipeline = AsyncMock(return_value=None)
 
@@ -728,26 +720,18 @@ async def test_respond_comment_run_pipeline(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "is_internal,run_success,expected_log,expected_branch",
+    "is_internal,expected_log,expected_branch",
     [
         (
-            True,
             True,
             "Pipeline started for branch",
             "feature-branch",
         ),  # internal PR success
-        (False, True, "Pipeline started for branch", "pr-123"),  # fork PR success
-        (
-            True,
-            False,
-            "Pipeline failed to start for branch",
-            "feature-branch",
-        ),  # internal PR failed
+        (False, "Pipeline started for branch", "pr-123"),  # fork PR success
     ],
 )
 async def test_respond_comment_run_pipeline_variations(
     is_internal,
-    run_success,
     expected_log,
     expected_branch,
     mock_comment_event,
@@ -767,7 +751,7 @@ async def test_respond_comment_run_pipeline_variations(
         mock_pr_data_for_comment["head"]["ref"] = "feature-branch"
 
     setup_pr_mocks(mock_pr_data_for_comment)
-    setup_pipeline_mocks(run_success=run_success)
+    setup_pipeline_mocks()
 
     await respond_comment(
         event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
@@ -817,26 +801,17 @@ async def test_respond_comment_restart_jobs(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "is_internal,pipeline_exists,retry_success,expected_log,expected_branch",
+    "is_internal,pipeline_exists,expected_log,expected_branch",
     [
         (
-            True,
             True,
             True,
             "Jobs restarted for branch",
             "feature-branch",
         ),  # internal success
-        (False, True, True, "Jobs restarted for branch", "pr-123"),  # fork success
+        (False, True, "Jobs restarted for branch", "pr-123"),  # fork success
         (
             True,
-            True,
-            False,
-            "Jobs restart failed for branch",
-            "feature-branch",
-        ),  # retry failed
-        (
-            True,
-            False,
             False,
             "No pipeline found for branch",
             "feature-branch",
@@ -846,7 +821,6 @@ async def test_respond_comment_restart_jobs(
 async def test_respond_comment_restart_jobs_variations(
     is_internal,
     pipeline_exists,
-    retry_success,
     expected_log,
     expected_branch,
     mock_comment_event,
@@ -866,7 +840,7 @@ async def test_respond_comment_restart_jobs_variations(
         mock_pr_data_for_comment["head"]["ref"] = "feature-branch"
 
     setup_pr_mocks(mock_pr_data_for_comment)
-    setup_pipeline_mocks(pipeline_exists=pipeline_exists, retry_success=retry_success)
+    setup_pipeline_mocks(pipeline_exists=pipeline_exists)
 
     await respond_comment(
         event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"

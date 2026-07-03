@@ -2,14 +2,29 @@ import logging
 import re
 from typing import Any
 
+from aiohttp.client_exceptions import ClientResponseError
 from gidgethub import routing, sansio
+from gidgetlab.exceptions import BadRequest
 from repligit.asyncio import fetch_pack, ls_remote, send_pack
 
 from hubcast.clients.github.client import GitHubClient
 from hubcast.clients.gitlab.client import GitLabClient
 from hubcast.exceptions import HubcastError
 from hubcast.logging import update_log_context
-from hubcast.web import comments
+from hubcast.web.github.messages import (
+    DEACTIVATED_ACCOUNT_MARKER,
+    DEACTIVATED_ACCOUNT_MSG,
+    HOOK_DECLINED_MSG,
+    HOOK_DECLINED_SUMMARY,
+    HOOK_DECLINED_TITLE,
+    PERMISSION_DENIED_DELETE_LOG_MSG,
+    PERMISSION_DENIED_STATUSES,
+    PERMISSION_DENIED_SUMMARY,
+    PERMISSION_DENIED_SYNC_LOG_MSG,
+    PERMISSION_DENIED_TITLE,
+    PIPELINE_FAILED_MSG,
+    help_message,
+)
 from hubcast.web.github.utils import get_repo_config
 
 log = logging.getLogger(__name__)
@@ -88,7 +103,21 @@ async def sync_branch(
     # sync commits from GitHub -> GitLab
     gl_token = await gl.auth.authenticate_user(gl_user)
 
-    gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
+    try:
+        gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
+    except ClientResponseError as exc:
+        if exc.status not in PERMISSION_DENIED_STATUSES:
+            raise
+        log.info(PERMISSION_DENIED_SYNC_LOG_MSG)
+        await gh.set_check_status(
+            want_sha,
+            repo_config.check_name,
+            "failure",
+            title=PERMISSION_DENIED_TITLE,
+            summary=PERMISSION_DENIED_SUMMARY,
+        )
+        return
+
     have_shas = set(gl_refs.values())
     from_sha = gl_refs.get(sync_ref) or ("0" * 40)
 
@@ -109,16 +138,45 @@ async def sync_branch(
         username=gh.requester,  # the username doesn't matter, but can't be empty
         password=gh_token,
     )
+    if packfile is None:
+        raise HubcastError(
+            f"Failed to fetch packfile for {want_sha} from {src_repo_url}"
+        )
 
-    await send_pack(
-        dest_remote_url,
-        sync_ref,
-        from_sha,
-        want_sha,
-        packfile,
-        username=gl_user,
-        password=gl_token,
-    )
+    try:
+        await send_pack(
+            dest_remote_url,
+            sync_ref,
+            from_sha,
+            want_sha,
+            packfile,
+            username=gl_user,
+            password=gl_token,
+        )
+    except ClientResponseError as exc:
+        if exc.status not in PERMISSION_DENIED_STATUSES:
+            raise
+        log.info(PERMISSION_DENIED_SYNC_LOG_MSG)
+        await gh.set_check_status(
+            want_sha,
+            repo_config.check_name,
+            "failure",
+            title=PERMISSION_DENIED_TITLE,
+            summary=PERMISSION_DENIED_SUMMARY,
+        )
+        return
+    # repligit
+    except Exception as exc:
+        if str(exc) != HOOK_DECLINED_MSG:
+            raise
+        await gh.set_check_status(
+            want_sha,
+            repo_config.check_name,
+            "failure",
+            title=HOOK_DECLINED_TITLE,
+            summary=HOOK_DECLINED_SUMMARY,
+        )
+        return
 
     log.info("Synced branch")
 
@@ -142,7 +200,15 @@ async def remove_branch(
 
     gl_token = await gl.auth.authenticate_user(gl_user)
 
-    gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
+    try:
+        gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
+    except ClientResponseError as exc:
+        if exc.status not in PERMISSION_DENIED_STATUSES:
+            raise
+        # we cannot set GitHub status checks for deleted refs, and we have no way to notify the user of this failure
+        log.info(PERMISSION_DENIED_DELETE_LOG_MSG)
+        return
+
     head_sha = gl_refs.get(sync_ref)
 
     update_log_context(ref=sync_ref, head_sha=head_sha)
@@ -155,15 +221,27 @@ async def remove_branch(
 
     log.info("Deleting branch")
 
-    await send_pack(
-        dest_remote_url,
-        sync_ref,
-        head_sha,
-        null_sha,
-        b"",
-        username=gl_user,
-        password=gl_token,
-    )
+    try:
+        await send_pack(
+            dest_remote_url,
+            sync_ref,
+            head_sha,
+            null_sha,
+            b"",
+            username=gl_user,
+            password=gl_token,
+        )
+    except ClientResponseError as exc:
+        if exc.status not in PERMISSION_DENIED_STATUSES:
+            raise
+        log.info(PERMISSION_DENIED_DELETE_LOG_MSG)
+        return
+    # repligit
+    except Exception as exc:
+        if str(exc) != HOOK_DECLINED_MSG:
+            raise
+        log.info(str(exc))
+        return
 
     log.info("Deleted branch")
 
@@ -219,7 +297,7 @@ async def sync_pr(
         if repo_config.sync_drafts_msg:
             await gh.set_check_status(
                 want_sha,
-                repo_config.check_name or "hubcast",
+                repo_config.check_name,
                 status="skipped",
                 title="Hubcast disables sync for draft PRs.",
             )
@@ -230,7 +308,21 @@ async def sync_pr(
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
     gl_token = await gl.auth.authenticate_user(gl_user)
 
-    gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
+    try:
+        gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
+    except ClientResponseError as exc:
+        if exc.status not in PERMISSION_DENIED_STATUSES:
+            raise
+        log.info(PERMISSION_DENIED_SYNC_LOG_MSG)
+        await gh.set_check_status(
+            want_sha,
+            repo_config.check_name,
+            "failure",
+            title=PERMISSION_DENIED_TITLE,
+            summary=PERMISSION_DENIED_SUMMARY,
+        )
+        return
+
     have_shas = set(gl_refs.values())
     from_sha = gl_refs.get(sync_ref) or ("0" * 40)
     update_log_context(from_sha=from_sha, want_sha=want_sha)
@@ -257,18 +349,47 @@ async def sync_pr(
             have_shas,
             **src_creds,
         )
+        if packfile is None:
+            raise HubcastError(
+                f"Failed to fetch packfile for {want_sha} from {src_repo_url}"
+            )
 
         # upload packfile to gitlab repository
         log.info("Syncing PR")
-        await send_pack(
-            dest_remote_url,
-            sync_ref,
-            from_sha,
-            want_sha,
-            packfile,
-            username=gl_user,
-            password=gl_token,
-        )
+        try:
+            await send_pack(
+                dest_remote_url,
+                sync_ref,
+                from_sha,
+                want_sha,
+                packfile,
+                username=gl_user,
+                password=gl_token,
+            )
+        except ClientResponseError as exc:
+            if exc.status not in PERMISSION_DENIED_STATUSES:
+                raise
+            log.info(PERMISSION_DENIED_SYNC_LOG_MSG)
+            await gh.set_check_status(
+                want_sha,
+                repo_config.check_name,
+                "failure",
+                title=PERMISSION_DENIED_TITLE,
+                summary=PERMISSION_DENIED_SUMMARY,
+            )
+            return
+        # repligit
+        except Exception as exc:
+            if str(exc) != HOOK_DECLINED_MSG:
+                raise
+            await gh.set_check_status(
+                want_sha,
+                repo_config.check_name,
+                "failure",
+                title=HOOK_DECLINED_TITLE,
+                summary=HOOK_DECLINED_SUMMARY,
+            )
+            return
 
         log.info("Synced PR")
 
@@ -276,6 +397,7 @@ async def sync_pr(
     if repo_config.create_mr and not await gl.get_mr(
         dest_fullname, sync_branch, default_branch
     ):
+        # user must have at least developer role to reach this point so we don't need to do a permissions check
         await gl.create_mr(
             gl_fullname=dest_fullname,
             src_branch=sync_branch,
@@ -355,7 +477,15 @@ async def remove_pr(
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
     gl_token = await gl.auth.authenticate_user(gl_user)
 
-    gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
+    try:
+        gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
+    except ClientResponseError as exc:
+        if exc.status not in PERMISSION_DENIED_STATUSES:
+            raise
+        # we cannot set GitHub status checks for deleted refs, and we have no way to notify the user of this failure
+        log.info(PERMISSION_DENIED_DELETE_LOG_MSG)
+        return
+
     head_sha = gl_refs.get(sync_ref)
     if head_sha is None:
         log.info("Skipped PR branch removal - ref not found")
@@ -364,15 +494,27 @@ async def remove_pr(
     null_sha = "0" * 40
 
     log.info("Deleting PR branch")
-    await send_pack(
-        dest_remote_url,
-        sync_ref,
-        head_sha,
-        null_sha,
-        b"",
-        username=gl_user,
-        password=gl_token,
-    )
+    try:
+        await send_pack(
+            dest_remote_url,
+            sync_ref,
+            head_sha,
+            null_sha,
+            b"",
+            username=gl_user,
+            password=gl_token,
+        )
+    except ClientResponseError as exc:
+        if exc.status not in PERMISSION_DENIED_STATUSES:
+            raise
+        log.info(PERMISSION_DENIED_DELETE_LOG_MSG)
+        return
+    # repligit
+    except Exception as exc:
+        if str(exc) != HOOK_DECLINED_MSG:
+            raise
+        log.info(str(exc))
+        return
 
     log.info("Deleted PR branch")
 
@@ -440,7 +582,7 @@ async def respond_comment(
     action_logged = False
 
     if re.search(f"{gh.bot_caller} help", comment, re.IGNORECASE):
-        response = comments.help_message(gh.bot_caller)
+        response = help_message(gh.bot_caller)
         log.info("Help message sent")
         action_logged = True
 
@@ -462,6 +604,7 @@ async def respond_comment(
         # this process will not sync changes, as an external collaborator could
         # submit malicious changes and trigger a sync without explicit approval
         # on the commit hash (see `respond_pr_comment`)
+        action_logged = True
         pull_request_id = event.data["issue"]["number"]
         pull_request = await gh.get_pr(pull_request_id)
 
@@ -483,17 +626,27 @@ async def respond_comment(
         # get the gitlab repo information and run the pipeline
         repo_config, _ = await get_repo_config(gh, base_fullname)
         dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
-        pipeline_url = await gl.run_pipeline(dest_fullname, branch)
 
-        if pipeline_url:
+        try:
+            pipeline_url = await gl.run_pipeline(dest_fullname, branch)
+        except BadRequest as exc:
+            if exc.status_code in PERMISSION_DENIED_STATUSES:
+                response = (
+                    DEACTIVATED_ACCOUNT_MSG
+                    if DEACTIVATED_ACCOUNT_MARKER in str(exc)
+                    else PERMISSION_DENIED_SUMMARY
+                )
+                log.info("Pipeline failed to start - insufficient permissions")
+            elif exc.status_code == 400:
+                # \n to avoid indent markdown issues
+                response = f"""{PIPELINE_FAILED_MSG}\n```\n{exc}\n```"""
+                log.info("Pipeline failed to start", extra={"error": exc})
+            else:
+                raise
+        else:
             response = f"I've started a new [pipeline]({pipeline_url}) for you!"
             plus_one = True
             log.info("Pipeline started for branch")
-            action_logged = True
-        else:
-            response = "I had a problem starting the pipeline."
-            log.info("Pipeline failed to start for branch")
-            action_logged = True
 
     elif re.search(
         f"{gh.bot_caller} restart failed(?:[- ]?jobs)?", comment, re.IGNORECASE
@@ -501,6 +654,7 @@ async def respond_comment(
         # if a pipeline failed, we give the user the option to restart any failed jobs
         # we don't want to re-sync the branch, as a new pipeline would be created
         # and would defeat the purpose of individually restarting failed jobs
+        action_logged = True
         pull_request_id = event.data["issue"]["number"]
         pull_request = await gh.get_pr(pull_request_id)
 
@@ -521,26 +675,40 @@ async def respond_comment(
         # get the gitlab repo information and run the pipeline
         repo_config, _ = await get_repo_config(gh, base_fullname)
         dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
-        pipeline_id = await gl.get_latest_pipeline(dest_fullname, branch)
 
-        if pipeline_id:
-            pipeline_url = await gl.retry_pipeline_jobs(dest_fullname, pipeline_id)
-
-            if pipeline_url:
-                response = (
-                    f"I've retried any failed jobs in the [pipeline]({pipeline_url})!"
-                )
-                plus_one = True
-                log.info("Jobs restarted for branch")
-                action_logged = True
-            else:
-                response = "I had a problem retrying jobs in the pipeline."
-                log.info("Jobs restart failed for branch")
-                action_logged = True
+        try:
+            pipeline_id = await gl.get_latest_pipeline(dest_fullname, branch)
+        except BadRequest as exc:
+            if exc.status_code not in PERMISSION_DENIED_STATUSES:
+                raise
+            response = (
+                DEACTIVATED_ACCOUNT_MSG
+                if DEACTIVATED_ACCOUNT_MARKER in str(exc)
+                else PERMISSION_DENIED_SUMMARY
+            )
+            log.info("Pipeline ID fetch failed - insufficient permissions")
         else:
-            response = "No pipeline exists."
-            log.info("No pipeline found for branch")
-            action_logged = True
+            if pipeline_id:
+                try:
+                    pipeline_url = await gl.retry_pipeline_jobs(
+                        dest_fullname, pipeline_id
+                    )
+                except BadRequest as exc:
+                    if exc.status_code not in PERMISSION_DENIED_STATUSES:
+                        raise
+                    response = (
+                        DEACTIVATED_ACCOUNT_MSG
+                        if DEACTIVATED_ACCOUNT_MARKER in str(exc)
+                        else PERMISSION_DENIED_SUMMARY
+                    )
+                    log.info("Jobs restart failed - insufficient permissions")
+                else:
+                    response = f"I've retried any failed jobs in the [pipeline]({pipeline_url})!"
+                    plus_one = True
+                    log.info("Jobs restarted for branch")
+            else:
+                response = "No pipeline exists."
+                log.info("No pipeline found for branch")
 
     if response:
         await gh.post_comment(event.data["issue"]["number"], response)
@@ -588,7 +756,29 @@ async def rerun_check(
     # get the GL repo info and run the pipeline
     repo_config, _ = await get_repo_config(gh, src_fullname)
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
-    await gl.run_pipeline(dest_fullname, branch)
+
+    try:
+        await gl.run_pipeline(dest_fullname, branch)
+    except BadRequest as exc:
+        if exc.status_code in PERMISSION_DENIED_STATUSES:
+            deactivated = DEACTIVATED_ACCOUNT_MARKER in str(exc)
+            message = (
+                DEACTIVATED_ACCOUNT_MSG if deactivated else PERMISSION_DENIED_TITLE
+            )
+            summary = "" if deactivated else PERMISSION_DENIED_SUMMARY
+        elif exc.status_code == 400:
+            message = PIPELINE_FAILED_MSG
+            summary = str(exc)
+        else:
+            raise
+        await gh.set_check_status(
+            check_run_commit,
+            repo_config.check_name,
+            "failure",
+            title=message,
+            summary=summary,
+        )
+        return
 
     log.info(
         "Rerun check requested for branch",

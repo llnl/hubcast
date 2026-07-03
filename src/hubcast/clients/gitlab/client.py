@@ -186,6 +186,9 @@ class GitLabClient:
                         "User cannot access GitLab webhooks; skipping set_webhook. Must have `maintainer` role."
                     )
                     return
+                elif exc.status_code == 401:
+                    log.info("User token is invalid or expired; skipping set_webhook.")
+                    return
                 raise
 
             existing_hook = None
