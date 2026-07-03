@@ -25,6 +25,17 @@ HOOK_DECLINED_TITLE = (
 HOOK_DECLINED_SUMMARY = f"Hubcast got `{HOOK_DECLINED_MSG}` when pushing changes. In most cases, this happens when a force push is initiated and the destination repository has branch protection rules enabled."
 PIPELINE_FAILED_MSG = "GitLab could not start the pipeline. Investigate the issue in your GitLab CI configuration"
 
+CONFIG_DOCS_URL = (
+    "https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#configuration"
+)
+CONFIG_NOT_FOUND_TITLE = "Hubcast configuration file not found."
+CONFIG_NOT_FOUND_SUMMARY = f"Add the configuration file to the default branch and retry. See the [user guide]({CONFIG_DOCS_URL}) for details."
+CONFIG_INVALID_TITLE = "Hubcast configuration file is invalid."
+CONFIG_INVALID_SUMMARY = (
+    "Hubcast could not parse `.github/hubcast.yml`. "
+    f"Fix the configuration file and retry. See the [user guide]({CONFIG_DOCS_URL}) for details."
+)
+
 
 def help_message(bot_caller: str) -> str:
     return f"""

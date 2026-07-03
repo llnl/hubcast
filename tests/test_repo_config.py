@@ -133,8 +133,10 @@ async def test_get_repo_config_missing_repo_key():
     gh.repo_owner = "owner"
     gh.repo_name = "repo"
 
-    with pytest.raises(HubcastError, match="top-level 'Repo' section"):
+    with pytest.raises(HubcastError, match="Invalid repo config") as exc_info:
         await get_repo_config(gh, "owner/repo")
+
+    assert "top-level 'Repo' section" in exc_info.value.context["error"]
 
 
 @pytest.mark.asyncio
@@ -146,8 +148,10 @@ async def test_get_repo_config_missing_required_fields():
     gh.repo_owner = "owner"
     gh.repo_name = "repo"
 
-    with pytest.raises(HubcastError, match="Field required"):
+    with pytest.raises(HubcastError, match="Invalid repo config") as exc_info:
         await get_repo_config(gh, "owner/repo")
+
+    assert "Field required" in exc_info.value.context["error"]
 
 
 @pytest.mark.asyncio
@@ -171,7 +175,7 @@ async def test_get_repo_config_not_found_from_cache():
         await get_repo_config(gh, "owner/repo")
 
     # second call should discover cache has None
-    with pytest.raises(HubcastError, match="Config file not found"):
+    with pytest.raises(HubcastError, match="Repo config file not found"):
         await get_repo_config(gh, "owner/repo")
 
     # should only call GH once since second call used cache

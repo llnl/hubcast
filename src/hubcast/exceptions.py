@@ -19,3 +19,21 @@ class HubcastError(Exception):
         logger.log(
             level, str(self), extra={**self.context, **extra_context}, exc_info=exc_info
         )
+
+
+class RepoConfigError(HubcastError):
+    """Raised when a repository's hubcast config is missing or invalid."""
+
+    def __init__(
+        self,
+        message: str,
+        title: str,
+        summary: str,
+        log_level: str = "INFO",
+        **context,
+    ):
+        super().__init__(message, log_level=log_level, **context)
+
+        # store these so route handlers can report the problem back to the user via GH check status
+        self.title = title
+        self.summary = summary

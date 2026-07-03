@@ -4,8 +4,14 @@ import yaml
 from cachetools import TTLCache
 
 from hubcast.clients.github import GitHubClient
-from hubcast.exceptions import HubcastError
+from hubcast.exceptions import RepoConfigError
 from hubcast.repos.config import RepoConfig
+from hubcast.web.github.messages import (
+    CONFIG_INVALID_SUMMARY,
+    CONFIG_INVALID_TITLE,
+    CONFIG_NOT_FOUND_SUMMARY,
+    CONFIG_NOT_FOUND_TITLE,
+)
 
 log = logging.getLogger(__name__)
 
@@ -36,9 +42,10 @@ async def get_repo_config(
         log.info("Repo config retrieved from cache")
         if config is None:
             # raise so route handlers can't continue
-            raise HubcastError(
-                "Config file not found",
-                log_level="INFO",
+            raise RepoConfigError(
+                "Repo config file not found",
+                title=CONFIG_NOT_FOUND_TITLE,
+                summary=CONFIG_NOT_FOUND_SUMMARY,
             )
         return config, False
 
@@ -49,26 +56,31 @@ async def get_repo_config(
         config_cache[fullname] = None
         log.info("Cached absence of repo config")
         # raise so route handlers can't continue
-        raise HubcastError(
+        raise RepoConfigError(
             "Repo config file not found",
-            log_level="INFO",
+            title=CONFIG_NOT_FOUND_TITLE,
+            summary=CONFIG_NOT_FOUND_SUMMARY,
         )
 
     # parse and validate YAML
     try:
         config_yaml = yaml.safe_load(fetched_config)
     except yaml.YAMLError as e:
-        raise HubcastError(
-            f"Invalid YAML in repo config for {fullname}: {e}",
-            log_level="INFO",
+        raise RepoConfigError(
+            "Invalid YAML in repo config",
+            title=CONFIG_INVALID_TITLE,
+            summary=CONFIG_INVALID_SUMMARY,
+            error=str(e),
         )
 
     try:
         config = RepoConfig.model_validate(config_yaml)
     except ValueError as e:
-        raise HubcastError(
-            f"Invalid repo config for {fullname}: {e}",
-            log_level="INFO",
+        raise RepoConfigError(
+            "Invalid repo config",
+            title=CONFIG_INVALID_TITLE,
+            summary=CONFIG_INVALID_SUMMARY,
+            error=str(e),
         )
 
     config_cache[fullname] = config

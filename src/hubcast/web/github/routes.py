@@ -9,8 +9,9 @@ from repligit.asyncio import fetch_pack, ls_remote, send_pack
 
 from hubcast.clients.github.client import GitHubClient
 from hubcast.clients.gitlab.client import GitLabClient
-from hubcast.exceptions import HubcastError
+from hubcast.exceptions import HubcastError, RepoConfigError
 from hubcast.logging import update_log_context
+from hubcast.repos.config import RepoConfig
 from hubcast.web.github.messages import (
     DEACTIVATED_ACCOUNT_MARKER,
     DEACTIVATED_ACCOUNT_MSG,
@@ -50,6 +51,19 @@ class GitHubRouter(routing.Router):
 router = GitHubRouter()
 
 
+async def report_config_error(gh: GitHubClient, sha: str, exc: RepoConfigError) -> None:
+    """Report a missing/invalid repo config to the user as a failed check."""
+    exc.log(log)
+    await gh.set_check_status(
+        sha,
+        # config can't be read so default check name is used
+        RepoConfig.model_fields["check_name"].default,
+        "failure",
+        title=exc.title,
+        summary=exc.summary,
+    )
+
+
 # -----------------------------------
 # Push Events
 # -----------------------------------
@@ -80,9 +94,13 @@ async def sync_branch(
     # only refresh config on default branch pushes (where .github/hubcast.yml lives)
     default_branch = event.data["repository"]["default_branch"]
     is_default_branch = sync_ref == f"refs/heads/{default_branch}"
-    repo_config, fetched = await get_repo_config(
-        gh, src_fullname, refresh=is_default_branch
-    )
+    try:
+        repo_config, fetched = await get_repo_config(
+            gh, src_fullname, refresh=is_default_branch
+        )
+    except RepoConfigError as exc:
+        await report_config_error(gh, want_sha, exc)
+        return
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
@@ -292,7 +310,12 @@ async def sync_pr(
         return
 
     # get the repository configuration from .github/hubcast.yml
-    repo_config, _ = await get_repo_config(gh, base_fullname)
+    try:
+        repo_config, _ = await get_repo_config(gh, base_fullname)
+    except RepoConfigError as exc:
+        await report_config_error(gh, want_sha, exc)
+        return
+
     if not repo_config.sync_drafts and pull_request["draft"]:
         if repo_config.sync_drafts_msg:
             await gh.set_check_status(
@@ -754,7 +777,12 @@ async def rerun_check(
         return
 
     # get the GL repo info and run the pipeline
-    repo_config, _ = await get_repo_config(gh, src_fullname)
+    try:
+        repo_config, _ = await get_repo_config(gh, src_fullname)
+    except RepoConfigError as exc:
+        await report_config_error(gh, check_run_commit, exc)
+        return
+
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
 
     try:
