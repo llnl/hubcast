@@ -105,7 +105,10 @@ async def pipeline_status_relay(
         details_url=pipeline_url,
     )
 
-    log.info("Relayed pipeline status", extra={"status": status, "sha": sha})
+    log.info(
+        "Relayed pipeline status",
+        extra={"status": status, "sha": sha, "pipeline_id": pipeline_id},
+    )
 
 
 @router.register("Job Hook")
@@ -172,5 +175,11 @@ async def job_status_relay(
     )
 
     log.info(
-        "Relayed job status", extra={"status": status, "sha": sha, "job_name": job_name}
+        "Relayed job status",
+        extra={
+            "status": status,
+            "sha": sha,
+            "job_name": job_name,
+            "job_id": event.data["build_id"],
+        },
     )
