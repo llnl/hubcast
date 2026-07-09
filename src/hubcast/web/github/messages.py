@@ -7,7 +7,7 @@ DEACTIVATED_ACCOUNT_MSG = (
     "Your account on the destination GitLab instance is deactivated."
 )
 PERMISSION_DENIED_TITLE = (
-    "Insufficient permissions on destination repository; user must have developer role."
+    "Hubcast couldn't sync your changes due to insufficient permissions."
 )
 PERMISSION_DENIED_DELETE_LOG_MSG = (
     "Failed to delete ref: insufficient permissions on destination repository."
@@ -15,7 +15,7 @@ PERMISSION_DENIED_DELETE_LOG_MSG = (
 PERMISSION_DENIED_SYNC_LOG_MSG = (
     "Failed to sync ref: insufficient permissions on destination repository."
 )
-PERMISSION_DENIED_SUMMARY = 'Hubcast requires all users to have at least the "developer" role on the destination repository. If editing the Hubcast configuration file, users must at least have the "maintainer" role to propagate changes.\nEdit the permission settings and retry.'
+PERMISSION_DENIED_SUMMARY = 'Hubcast requires all users to have at least the "developer" role on the destination repository or have a repository maintainer mirror changes [on your behalf](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#secure-mirroring).'
 
 # raised by repligit's send_pack when the destination rejects the ref update (e.g. protected branches)
 HOOK_DECLINED_MSG = "pre-receive hook declined"
