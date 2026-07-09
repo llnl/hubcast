@@ -100,7 +100,7 @@ After installing Hubcast on your repository, the first push to the default branc
 
 To resolve this, have a user with the maintainer role push to the default branch; an empty commit is sufficient.
 
-If you expect contributions from users who aren't members of the destination repository or don't have accounts on the destination forge, Hubcast enables you to approve their requests via a bot-like interface.
+If you expect contributions from users who aren't members of the destination repository or don't have accounts on the destination forge, Hubcast enables you to mirror their changes via a bot-like interface.
 
 ### Hubcast bot
 Depending on the setup of your Hubcast installation, you can request assistance from the bot by tagging an account (e.g., `@lc-hubcast help`) or the default `/hubcast help` in a PR/MR comment.
@@ -110,16 +110,16 @@ Depending on the setup of your Hubcast installation, you can request assistance 
 
 The bot supports the following commands:
 - `@{bot} help` - Display available commands and usage information
-- `@{bot} approve` - Sync this pull request to the destination forge and trigger a new pipeline (requires maintainer permissions)
+- `@{bot} mirror` - Mirror this PR to the destination repo; Hubcast will push commits and run pipelines on behalf of the commenter
 - `@{bot} run pipeline` - Request a new run of the GitLab CI pipeline
 - `@{bot} restart failed jobs` - Restart any failed jobs in the latest CI pipeline
 
 Replace `@{bot}` with your instance's bot user (e.g., `@lc-hubcast`) or use `/hubcast` if no bot user is configured.
 
-#### Approval
-To securely sync commits from external collaborators, approvals must be done via commenting on a PR review, ensuring that the approval is linked to a specific commit.
+#### Trusted Mirroring
+To securely sync commits from external collaborators, mirroring requests must be done via commenting on a PR review, ensuring that it is linked to a specific commit.
 
-![A GitHub pull request review; the user has written a comment `@lc-hubcast approve` to sync the user's contributions.](/docs/img/approve-comment.png)
+![A GitHub pull request review; the user has written a comment `@lc-hubcast mirror` to sync the user's contributions.](/docs/img/approve-comment.png)
 
 > [!NOTE]
-> Commenting on lines of code modified by the PR **will not** approve syncing; it must be done as shown above.
+> Commenting on lines of code modified by the PR **will not** initiate mirroring; it must be done as shown above.

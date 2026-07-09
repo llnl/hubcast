@@ -115,7 +115,7 @@ def mock_review_event(mock_pr_data_for_comment):
         },
         "review": {
             "node_id": 789,
-            "body": "@hubcast-bot approve",
+            "body": "@hubcast-bot mirror",
             "commit_id": "pr-sha-123",
         },
         "pull_request": mock_pr_data_for_comment,
@@ -634,7 +634,7 @@ async def test_remove_pr_deleted(
     "command,expected_log,is_pr",
     [
         ("@hubcast-bot help", "Help message sent", True),
-        ("@hubcast-bot approve", "Approval reminder sent", True),
+        ("@hubcast-bot mirror", "Mirroring clarification sent", True),
         ("random text", "Skipped comment - no command matched", True),
         (
             "@hubcast-bot help",
@@ -652,7 +652,7 @@ async def test_respond_comment_simple_commands(
     call_respond_comment,
     caplog,
 ):
-    """Should handle simple commands (help, approve, unmatched) and non-PR comments."""
+    """Should handle simple commands (help, mirror, unmatched) and non-PR comments."""
     if not is_pr:
         del mock_comment_event.data["issue"]["pull_request"]
 
@@ -666,8 +666,8 @@ async def test_respond_comment_simple_commands(
     "command,expected_log,needs_pr_setup",
     [
         (
-            "@hubcast-bot approve",
-            "Mirrored ref with approval from review comment",
+            "@hubcast-bot mirror",
+            "Mirrored ref via review comment",
             True,
         ),
         ("Looks good to me!", "Skipped PR review comment - no command matched", False),
@@ -684,7 +684,7 @@ async def test_respond_pr_comment_commands(
     call_respond_pr_comment,
     caplog,
 ):
-    """Should handle PR review comments (approve or no command)."""
+    """Should handle PR review comments (mirror or no command)."""
     if needs_pr_setup:
         mock_gh.get_pr = AsyncMock(return_value=mock_pr_data_for_comment)
         mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
@@ -698,8 +698,6 @@ async def test_respond_pr_comment_commands(
 @pytest.mark.parametrize(
     "command",
     [
-        "@hubcast-bot run pipeline",
-        "@hubcast-bot start pipeline",
         "@hubcast-bot rerun pipeline",
         "@hubcast-bot re-run pipeline",
         "@hubcast-bot restart pipeline",
@@ -715,7 +713,7 @@ async def test_respond_comment_run_pipeline(
     mock_pr_data_for_comment,
     caplog,
 ):
-    """Should handle all variations of run/start pipeline command."""
+    """Should handle all variations of rerun/restart pipeline command."""
     mock_comment_event.data["comment"]["body"] = command
     mock_gh.get_pr = AsyncMock(return_value=mock_pr_data_for_comment)
     mock_gl.run_pipeline = AsyncMock(return_value="https://gitlab.com/pipeline/123")
@@ -761,7 +759,7 @@ async def test_respond_comment_run_pipeline_variations(
     caplog,
 ):
     """Should handle pipeline start for internal/fork PRs and success/failure."""
-    mock_comment_event.data["comment"]["body"] = "@hubcast-bot run pipeline"
+    mock_comment_event.data["comment"]["body"] = "@hubcast-bot rerun pipeline"
 
     if is_internal:
         mock_pr_data_for_comment["head"]["repo"]["full_name"] = "owner/repo"

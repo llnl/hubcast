@@ -393,15 +393,15 @@ async def respond_pr_comment(
         log.info("Skipped comment - no command matched")
         return
 
-    if re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
+    if re.search(f"{gh.bot_caller} (mirror|approve)", comment, re.IGNORECASE):
         # sync PR changes to the destination on behalf of the commenter
         # does not handle PR deletions, those will need to be manually cleaned by project maintainers
 
-        # approvals must be tied to specific commit hashes to avoid unintended syncing of malicious commits
+        # mirror requests must be tied to specific commit hashes to avoid unintended syncing of malicious commits
         commit_sha = event.data["review"]["commit_id"]
         pull_request = event.data["pull_request"]
         src_repo_private = pull_request["head"]["repo"]["private"]
-        # sync the approved commit explicitly
+        # mirror the commit tied the review comment
         await sync_pr(
             pull_request,
             gh,
@@ -413,9 +413,7 @@ async def respond_pr_comment(
         )
         await gh.react_to_comment(event.data["review"]["node_id"], "+1")
 
-        log.info(
-            "Mirrored ref with approval from review comment", extra={"ref": commit_sha}
-        )
+        log.info("Mirrored ref via review comment", extra={"ref": commit_sha})
     else:
         log.info("Skipped PR review comment - no command matched")
 
@@ -444,18 +442,17 @@ async def respond_comment(
         log.info("Help message sent")
         action_logged = True
 
-    elif re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
+    elif re.search(f"{gh.bot_caller} (mirror|approve)", comment, re.IGNORECASE):
         response = (
-            "To approve syncing this PR, please use the "
-            "[GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#approval) "
-            "to submit an approval. This ensures approval is tied to a specific "
-            "commit to avoid the sync of malicious data."
+            "To mirror this PR, please use the "
+            "[GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#trusted-mirroring). "
+            "This ensures the mirroring request is tied to a specific commit."
         )
-        log.info("Approval reminder sent")
+        log.info("Mirroring clarification sent")
         action_logged = True
 
     elif re.search(
-        f"{gh.bot_caller} (re[-]?)?(run|start) pipeline", comment, re.IGNORECASE
+        f"{gh.bot_caller} re[-]?(run|start) pipeline", comment, re.IGNORECASE
     ):
         # allows a project maintainer to restart the pipeline for a PR; should be
         # used for issues unrelated for code changes
