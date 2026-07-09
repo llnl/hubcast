@@ -5,13 +5,11 @@ import yaml
 from cachetools import TTLCache
 
 from hubcast.clients.github import GitHubClient
-from hubcast.exceptions import RepoConfigError
+from hubcast.exceptions import HubcastError, RepoConfigError
 from hubcast.repos.config import RepoConfig
 from hubcast.web.github.messages import (
     CONFIG_INVALID_SUMMARY,
     CONFIG_INVALID_TITLE,
-    CONFIG_NOT_FOUND_SUMMARY,
-    CONFIG_NOT_FOUND_TITLE,
 )
 
 log = logging.getLogger(__name__)
@@ -53,11 +51,9 @@ async def get_repo_config(
         log.info("Repo config retrieved from cache")
         if config is None:
             # raise so route handlers can't continue
-            raise RepoConfigError(
-                "Repo config file not found",
-                title=CONFIG_NOT_FOUND_TITLE,
-                summary=CONFIG_NOT_FOUND_SUMMARY,
-            )
+            # we don't want to raise this as a RepoConfigError because telling users
+            # about the absence of the config will create noise and confusion
+            raise HubcastError("Repo config file not found", log_level="INFO")
         return config, False
 
     # cache miss or refresh requested, fetch from GH
@@ -67,11 +63,7 @@ async def get_repo_config(
         config_cache[fullname] = None
         log.info("Cached absence of repo config")
         # raise so route handlers can't continue
-        raise RepoConfigError(
-            "Repo config file not found",
-            title=CONFIG_NOT_FOUND_TITLE,
-            summary=CONFIG_NOT_FOUND_SUMMARY,
-        )
+        raise HubcastError("Repo config file not found", log_level="INFO")
 
     # parse and validate YAML
     try:

@@ -33,9 +33,6 @@ WEBHOOK_PERMISSION_DENIED_SUMMARY = 'Hubcast was unable to propagate changes to 
 CONFIG_DOCS_URL = (
     "https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#configuration"
 )
-CONFIG_NOT_FOUND_TITLE = "Hubcast configuration file not found."
-CONFIG_NOT_FOUND_SUMMARY = f"Add the configuration file to the default branch and retry. See the [user guide]({CONFIG_DOCS_URL}) for details."
-CONFIG_INVALID_TITLE = "Hubcast configuration file is invalid."
 
 INTERNAL_ERROR_TITLE = "Hubcast internal error"
 INTERNAL_ERROR_SUMMARY = (
@@ -43,6 +40,7 @@ INTERNAL_ERROR_SUMMARY = (
     "This is not caused by your repository configuration or permissions. "
     "Please contact the admins of this Hubcast instance."
 )
+CONFIG_INVALID_TITLE = "Hubcast configuration file is invalid"
 CONFIG_INVALID_SUMMARY = (
     "Hubcast could not parse `.github/hubcast.yml`. "
     f"Fix the configuration file and retry. See the [user guide]({CONFIG_DOCS_URL}) for details."
