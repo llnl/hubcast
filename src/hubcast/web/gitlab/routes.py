@@ -156,7 +156,7 @@ async def job_status_relay(
     job_id = event.data["build_id"]
     job_name = event.data["build_name"]
 
-    update_log_context(job_id=job_id, sha=sha)
+    update_log_context(job_id=job_id, job_name=job_name, sha=sha)
 
     if "child-pipelines" in check_types:
         pipeline_id = event.data["pipeline_id"]
