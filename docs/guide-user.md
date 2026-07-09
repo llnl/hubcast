@@ -20,15 +20,14 @@ Repo:
   check_name: gitlab-ci
 
   # Optional: granularity of CI statuses reported to GitHub (default: [pipeline])
+  # The overall pipeline status is always reported, in addition to any other types listed here.
   # Available types: pipeline, child-pipelines, jobs
   # You can mix and match any combination of these types
   # Examples:
   #   [pipeline] - overall pipeline status only (default behavior)
-  #   [child-pipelines] - child pipeline statuses only
-  #   [jobs] - individual job statuses only
-  #   [pipeline, child-pipelines] - pipeline and child pipeline statuses
-  #   [pipeline, jobs] - pipeline and job statuses
-  #   [pipeline, child-pipelines, jobs] - all status types
+  #   [child-pipelines] - child pipeline statuses, plus overall pipeline status
+  #   [jobs] - individual job statuses, plus overall pipeline status
+  #   [child-pipelines, jobs] - child pipeline and job statuses, plus overall pipeline status
   check_types: [pipeline]
 
   # Optional: delete branches from destination when source PR is closed (default: true)

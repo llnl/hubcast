@@ -62,6 +62,49 @@ def test_create_config_full():
     assert config.sync_drafts_msg is False
 
 
+def test_check_types_defaults_to_pipeline():
+    """Should default check_types to just 'pipeline'."""
+
+    config = RepoConfig.model_validate(
+        {"Repo": {"dest_org": "owner", "dest_name": "repo"}}
+    )
+
+    assert config.check_types == ["pipeline"]
+
+
+def test_check_types_always_includes_pipeline():
+    """Should force-enable the 'pipeline' check even if omitted by the user."""
+
+    config = RepoConfig.model_validate(
+        {
+            "Repo": {
+                "dest_org": "owner",
+                "dest_name": "repo",
+                "check_types": ["jobs"],
+            }
+        }
+    )
+
+    assert "pipeline" in config.check_types
+    assert "jobs" in config.check_types
+
+
+def test_check_types_no_duplicate_pipeline():
+    """Should not duplicate 'pipeline' if the user already included it."""
+
+    config = RepoConfig.model_validate(
+        {
+            "Repo": {
+                "dest_org": "owner",
+                "dest_name": "repo",
+                "check_types": ["pipeline", "jobs"],
+            }
+        }
+    )
+
+    assert config.check_types == ["pipeline", "jobs"]
+
+
 def test_validator_with_non_dict():
     """Should handle non-dict input by passing through to other validators."""
     # The validator should pass through non-dict data
