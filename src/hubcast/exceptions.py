@@ -37,3 +37,10 @@ class RepoConfigError(HubcastError):
         # store these so route handlers can report the problem back to the user via GH check status
         self.title = title
         self.summary = summary
+
+
+class WebhookPermissionError(HubcastError):
+    """Raised when set_webhook fails because the pusher lacks the GitLab maintainer role."""
+
+    def __init__(self, message: str, log_level: str = "INFO", **context):
+        super().__init__(message, log_level=log_level, **context)

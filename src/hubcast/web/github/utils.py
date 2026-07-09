@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import yaml
 from cachetools import TTLCache
@@ -17,6 +18,16 @@ log = logging.getLogger(__name__)
 
 # Shared cache for repository configs with 30-minute TTL
 config_cache: TTLCache[str, RepoConfig | None] = TTLCache(maxsize=1000, ttl=1800)
+
+
+def changed_files_from_push(payload: dict[str, Any]) -> set[str]:
+    """Collect all file paths touched by the commits in a push payload."""
+    return {
+        f
+        for c in payload["commits"]
+        for key in ("added", "modified", "removed")
+        for f in c.get(key, ())
+    }
 
 
 async def get_repo_config(

@@ -9,6 +9,7 @@ from hubcast.clients.gitlab.auth import (
     GitLabAuthenticator,
     GitLabSingleUserAuthenticator,
 )
+from hubcast.exceptions import HubcastError, WebhookPermissionError
 from hubcast.webhook import RoutingToken
 
 log = logging.getLogger(__name__)
@@ -182,13 +183,15 @@ class GitLabClient:
                 hooks_data = await gl.getitem(url)
             except gidgetlab.exceptions.BadRequest as exc:
                 if exc.status_code == 403:
-                    log.info(
-                        "User cannot access GitLab webhooks; skipping set_webhook. Must have `maintainer` role."
-                    )
-                    return
+                    raise WebhookPermissionError(
+                        "User cannot access GitLab webhooks; must have `maintainer` role."
+                    ) from exc
                 elif exc.status_code == 401:
-                    log.info("User token is invalid or expired; skipping set_webhook.")
-                    return
+                    # the user never supplies this token; a rejection means
+                    # hubcast's own credential setup is broken
+                    raise HubcastError(
+                        "GitLab rejected hubcast's token while setting webhook - check hubcast's GitLab credentials",
+                    ) from exc
                 raise
 
             existing_hook = None

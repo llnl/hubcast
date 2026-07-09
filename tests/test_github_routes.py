@@ -33,6 +33,9 @@ def mock_push_event():
         "after": "sha-123",
         "head_commit": {"id": "sha-123"},
         "ref": "refs/heads/main",
+        "commits": [
+            {"added": [], "modified": ["src/app.py"], "removed": []},
+        ],
     }
     return event
 

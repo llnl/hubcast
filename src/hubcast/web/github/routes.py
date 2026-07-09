@@ -9,24 +9,28 @@ from repligit.asyncio import fetch_pack, ls_remote, send_pack
 
 from hubcast.clients.github.client import GitHubClient
 from hubcast.clients.gitlab.client import GitLabClient
-from hubcast.exceptions import HubcastError, RepoConfigError
+from hubcast.exceptions import HubcastError, RepoConfigError, WebhookPermissionError
 from hubcast.logging import update_log_context
-from hubcast.repos.config import RepoConfig
+from hubcast.repos.config import HUBCAST_CONFIG_PATH
 from hubcast.web.github.messages import (
     DEACTIVATED_ACCOUNT_MARKER,
     DEACTIVATED_ACCOUNT_MSG,
     HOOK_DECLINED_MSG,
     HOOK_DECLINED_SUMMARY,
     HOOK_DECLINED_TITLE,
+    INTERNAL_ERROR_SUMMARY,
+    INTERNAL_ERROR_TITLE,
     PERMISSION_DENIED_DELETE_LOG_MSG,
     PERMISSION_DENIED_STATUSES,
     PERMISSION_DENIED_SUMMARY,
     PERMISSION_DENIED_SYNC_LOG_MSG,
     PERMISSION_DENIED_TITLE,
     PIPELINE_FAILED_MSG,
+    WEBHOOK_PERMISSION_DENIED_SUMMARY,
+    WEBHOOK_PERMISSION_DENIED_TITLE,
     help_message,
 )
-from hubcast.web.github.utils import get_repo_config
+from hubcast.web.github.utils import changed_files_from_push, get_repo_config
 
 log = logging.getLogger(__name__)
 
@@ -51,13 +55,19 @@ class GitHubRouter(routing.Router):
 router = GitHubRouter()
 
 
+# check name used to report errors about repo config or webhooks
+# this avoids overwriting errors if a normal pipeline succeeds, and provides
+# a default for situations where there is no default check name set
+# this check won't linger because resolving issues requires a new commit to be pushed
+ERROR_CHECK_NAME = "hubcast-error"
+
+
 async def report_config_error(gh: GitHubClient, sha: str, exc: RepoConfigError) -> None:
     """Report a missing/invalid repo config to the user as a failed check."""
     exc.log(log)
     await gh.set_check_status(
         sha,
-        # config can't be read so default check name is used
-        RepoConfig.model_fields["check_name"].default,
+        ERROR_CHECK_NAME,
         "failure",
         title=exc.title,
         summary=exc.summary,
@@ -91,12 +101,13 @@ async def sync_branch(
         log.info("Skipped branch sync - branch has open PR")
         return
 
-    # only refresh config on default branch pushes (where .github/hubcast.yml lives)
+    # only refresh config when a default branch push touches .github/hubcast.yml
     default_branch = event.data["repository"]["default_branch"]
     is_default_branch = sync_ref == f"refs/heads/{default_branch}"
+    config_changed = HUBCAST_CONFIG_PATH in changed_files_from_push(event.data)
     try:
         repo_config, fetched = await get_repo_config(
-            gh, src_fullname, refresh=is_default_branch
+            gh, src_fullname, refresh=is_default_branch and config_changed
         )
     except RepoConfigError as exc:
         await report_config_error(gh, want_sha, exc)
@@ -104,19 +115,46 @@ async def sync_branch(
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
+    commit_msg = event.data.get("head_commit", {}).get("message", "")
 
     # only set/update webhook on default branch pushes when config cache was bypassed (refresh or initial fetch)
-    if fetched and is_default_branch:
+    # and if the config file itself was changed (config_changed above)
+    # we want to give maintainers the option to set the webhook with an empty commit hence the message checking
+    if is_default_branch and (fetched or "[hubcast config]" in commit_msg):
         # setup callback webhook on GitLab
-        await gl.set_webhook(
-            dest_org=repo_config.dest_org,
-            dest_repo=repo_config.dest_name,
-            gh_owner=src_owner,
-            gh_repo=src_repo_name,
-            gh_check=repo_config.check_name,
-            check_types=repo_config.check_types,
-        )
-        log.info("Updated GitLab webhook", extra={"dest_fullname": dest_fullname})
+        try:
+            await gl.set_webhook(
+                dest_org=repo_config.dest_org,
+                dest_repo=repo_config.dest_name,
+                gh_owner=src_owner,
+                gh_repo=src_repo_name,
+                gh_check=repo_config.check_name,
+                check_types=repo_config.check_types,
+            )
+        except WebhookPermissionError as exc:
+            # the user is not a maintainer and we need to tell them to push config changes with higher permissions
+            exc.log(log)
+            await gh.set_check_status(
+                want_sha,
+                ERROR_CHECK_NAME,
+                "failure",
+                title=WEBHOOK_PERMISSION_DENIED_TITLE,
+                summary=WEBHOOK_PERMISSION_DENIED_SUMMARY,
+            )
+            return
+        except HubcastError as exc:
+            # log for the hubcast admin and tell the user it's not their fault
+            exc.log(log)
+            await gh.set_check_status(
+                want_sha,
+                ERROR_CHECK_NAME,
+                "failure",
+                title=INTERNAL_ERROR_TITLE,
+                summary=INTERNAL_ERROR_SUMMARY,
+            )
+            return
+        else:
+            log.info("Updated GitLab webhook", extra={"dest_fullname": dest_fullname})
 
     # sync commits from GitHub -> GitLab
     gl_token = await gl.auth.authenticate_user(gl_user)
