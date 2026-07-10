@@ -7,6 +7,7 @@ from gidgetlab import routing, sansio
 from hubcast.clients.github.client import GitHubClient
 from hubcast.clients.gitlab.client import GitLabClient
 from hubcast.exceptions import HubcastError
+from hubcast.logging import update_log_context
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +72,8 @@ async def pipeline_status_relay(
     project = event.data["project"]["path_with_namespace"]
     sha = event.data["object_attributes"]["sha"]
 
+    update_log_context(pipeline_id=pipeline_id, sha=sha)
+
     is_child_pipeline = pipeline_source == "parent_pipeline"
 
     event_type = "child-pipelines" if is_child_pipeline else "pipeline"
@@ -105,7 +108,7 @@ async def pipeline_status_relay(
         details_url=pipeline_url,
     )
 
-    log.info("Relayed pipeline status", extra={"status": status, "sha": sha})
+    log.info("Relayed pipeline status", extra={"status": status})
 
 
 @router.register("Job Hook")
@@ -148,6 +151,8 @@ async def job_status_relay(
     job_id = event.data["build_id"]
     job_name = event.data["build_name"]
 
+    update_log_context(job_id=job_id, job_name=job_name, sha=sha)
+
     if "child-pipelines" in check_types:
         pipeline_id = event.data["pipeline_id"]
         pipeline = await gl.get_pipeline(project, pipeline_id)
@@ -171,6 +176,4 @@ async def job_status_relay(
         details_url=job_url,
     )
 
-    log.info(
-        "Relayed job status", extra={"status": status, "sha": sha, "job_name": job_name}
-    )
+    log.info("Relayed job status", extra={"status": status})
