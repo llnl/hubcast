@@ -79,7 +79,7 @@ Hubcast requires your destination repository to be configured with certain setti
 
 ### User roles
 
-Because Hubcast links identities between the source and destination forges, both accounts must have similar permissions on both repositories.
+Because Hubcast links identities between the source and destination forges, both accounts must have similar permissions on each repository.
 
 Members of your development team should be assigned to at least the GitLab **developer** role for Hubcast to automatically mirror contributions to the destination repository.
 
@@ -102,8 +102,6 @@ To resolve this, have a user with the maintainer role push to the default branch
 Hubcast may mirror changes via a force push, depending on the state of your repositories. To avoid issues, you may wish to disable the default force push branch protection rules on the destination repository.
 
 ## Hubcast bot
-If you expect contributions from users who aren't members of the destination repository or don't have accounts on the destination forge, Hubcast enables you to mirror their changes via a bot-like interface.
-
 Depending on the setup of your Hubcast installation, you can request assistance from the bot by tagging an account (e.g., `@lc-hubcast help`) or the default `/hubcast help` in a PR/MR comment.
 
 > [!TIP]
