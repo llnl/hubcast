@@ -4,12 +4,13 @@ You can interact with me in many ways!
 
 - `{bot_caller} mirror`: 
     - Mirror this PR to the destination repo
-    - Hubcast will push commits and run pipelines on behalf of the commenter
+    - Hubcast will perform actions on behalf of the commenter
+    - Must be called using the [GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#trusted-mirroring)
 - `{bot_caller} restart pipeline`: request a restart of the latest GitLab CI pipeline
-- `{bot_caller} restart failed jobs`: restart any failed jobs in the most recent pipeline
+- `{bot_caller} restart failed jobs`: restart any failed jobs in the latest pipeline
 - `{bot_caller} help`: see this message
 
-If you are an outside contributor, a maintainer will need to mirror your changes using the [GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#trusted-mirroring).
+If you are an outside contributor, a maintainer will need to mirror your changes using the `{bot_caller} mirror` command.
 
 A [user guide](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md) is available for additional details on Hubcast's functionality.
 
