@@ -1,12 +1,34 @@
 # tests for Hubcast's GitHub route handlers
 
+from collections.abc import Callable
+from http import HTTPStatus
+from typing import NamedTuple
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from aiohttp.client_exceptions import ClientResponseError
 from gidgethub import sansio
+from gidgetlab.exceptions import BadRequest
 
-from hubcast.exceptions import HubcastError
+from hubcast.exceptions import HubcastError, RepoConfigError, WebhookPermissionError
+from hubcast.web.github.messages import (
+    DEACTIVATED_ACCOUNT_MARKER,
+    DEACTIVATED_ACCOUNT_MSG,
+    HOOK_DECLINED_MSG,
+    HOOK_DECLINED_SUMMARY,
+    HOOK_DECLINED_TITLE,
+    INTERNAL_ERROR_SUMMARY,
+    INTERNAL_ERROR_TITLE,
+    PERMISSION_DENIED_DELETE_LOG_MSG,
+    PERMISSION_DENIED_SUMMARY,
+    PERMISSION_DENIED_SYNC_LOG_MSG,
+    PERMISSION_DENIED_TITLE,
+    PIPELINE_FAILED_MSG,
+    WEBHOOK_PERMISSION_DENIED_SUMMARY,
+    WEBHOOK_PERMISSION_DENIED_TITLE,
+)
 from hubcast.web.github.routes import (
+    ERROR_CHECK_NAME,
     remove_branch,
     remove_pr,
     rerun_check,
@@ -16,6 +38,18 @@ from hubcast.web.github.routes import (
     sync_branch,
     sync_pr_event,
 )
+
+
+def permission_error(status: int = 403) -> ClientResponseError:
+    """Build the aiohttp error repligit raises on HTTP failures."""
+    return ClientResponseError(request_info=Mock(), history=(), status=status)
+
+
+def repo_config_error() -> RepoConfigError:
+    return RepoConfigError(
+        "Invalid repo config", title="config title", summary="config summary"
+    )
+
 
 ### FIXTURES
 
@@ -31,7 +65,7 @@ def mock_push_event():
             "default_branch": "main",
         },
         "after": "sha-123",
-        "head_commit": {"id": "sha-123"},
+        "head_commit": {"id": "sha-123", "message": "update app"},
         "ref": "refs/heads/main",
         "commits": [
             {"added": [], "modified": ["src/app.py"], "removed": []},
@@ -197,6 +231,8 @@ def mock_repligit_ops():
             sync_drafts=True,
             sync_drafts_msg=True,
             delete_closed=True,
+            check_name="hubcast",
+            check_types=["pipeline"],
         )
         mock_get_config.return_value = (default_config, True)
 
@@ -353,6 +389,118 @@ async def test_sync_branch_synced(
     assert "Synced branch" in caplog.text
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "ref,modified,expected_refresh",
+    [
+        ("refs/heads/main", [".github/hubcast.yml"], True),
+        ("refs/heads/main", ["src/app.py"], False),
+        ("refs/heads/feature", [".github/hubcast.yml"], False),
+    ],
+)
+async def test_sync_branch_config_refresh(
+    ref,
+    modified,
+    expected_refresh,
+    mock_push_event,
+    mock_gh,
+    mock_gl,
+    mock_repligit_ops,
+):
+    """Config should only be refreshed when a default branch push touches the config file."""
+
+    mock_push_event.data["ref"] = ref
+    mock_push_event.data["commits"] = [
+        {"added": [], "modified": modified, "removed": []}
+    ]
+
+    await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    mock_repligit_ops["get_repo_config"].assert_awaited_once_with(
+        mock_gh, "owner/repo", refresh=expected_refresh
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "ref,fetched,commit_msg,webhook_expected",
+    [
+        # config was (re)fetched on a default branch push
+        ("refs/heads/main", True, "update app", True),
+        # cached config, no marker: nothing to do
+        ("refs/heads/main", False, "update app", False),
+        # manual trigger via commit message marker
+        ("refs/heads/main", False, "empty commit [hubcast config]", True),
+        # never set webhooks from non-default branches
+        ("refs/heads/feature", True, "update app", False),
+    ],
+)
+async def test_sync_branch_webhook_gating(
+    ref,
+    fetched,
+    commit_msg,
+    webhook_expected,
+    mock_push_event,
+    mock_gh,
+    mock_gl,
+    mock_repligit_ops,
+):
+    """Webhook should only be set on default branch pushes with a config fetch or marker."""
+
+    mock_push_event.data["ref"] = ref
+    mock_push_event.data["head_commit"]["message"] = commit_msg
+    config, _ = mock_repligit_ops["get_repo_config"].return_value
+    mock_repligit_ops["get_repo_config"].return_value = (config, fetched)
+
+    await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    if webhook_expected:
+        mock_gl.set_webhook.assert_awaited_once()
+    else:
+        mock_gl.set_webhook.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sync_branch_webhook_permission_denied(
+    mock_push_event, mock_gh, mock_gl, mock_repligit_ops
+):
+    """A non-maintainer pushing config changes should get a failed check explaining the fix."""
+
+    mock_gl.set_webhook.side_effect = WebhookPermissionError("not a maintainer")
+
+    await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    mock_gh.set_check_status.assert_awaited_once_with(
+        "sha-123",
+        ERROR_CHECK_NAME,
+        "failure",
+        title=WEBHOOK_PERMISSION_DENIED_TITLE,
+        summary=WEBHOOK_PERMISSION_DENIED_SUMMARY,
+    )
+    # the sync should not proceed
+    mock_repligit_ops["send_pack"].assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sync_branch_webhook_internal_error(
+    mock_push_event, mock_gh, mock_gl, mock_repligit_ops
+):
+    """A broken hubcast credential should be reported as an internal error."""
+
+    mock_gl.set_webhook.side_effect = HubcastError("GitLab rejected hubcast's token")
+
+    await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    mock_gh.set_check_status.assert_awaited_once_with(
+        "sha-123",
+        ERROR_CHECK_NAME,
+        "failure",
+        title=INTERNAL_ERROR_TITLE,
+        summary=INTERNAL_ERROR_SUMMARY,
+    )
+    mock_repligit_ops["send_pack"].assert_not_called()
+
+
 # Tests for remove_branch
 
 
@@ -421,6 +569,29 @@ async def test_sync_pr_skip_draft(
     await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
     assert "Skipped PR sync - draft PR" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_sync_pr_skip_draft_without_message(
+    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
+):
+    """Draft PR skips should not set a check status when sync_drafts_msg is False."""
+
+    mock_pr_event.data["pull_request"]["draft"] = True
+    mock_repligit_ops["get_repo_config"].return_value = (
+        Mock(
+            sync_drafts=False,
+            sync_drafts_msg=False,
+            dest_org="owner",
+            dest_name="repo",
+        ),
+        True,
+    )
+
+    await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    assert "Skipped PR sync - draft PR" in caplog.text
+    mock_gh.set_check_status.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -547,6 +718,157 @@ async def test_sync_pr_skips_mr_when_already_exists(
     mock_gl.create_mr.assert_not_called()
 
 
+# Shared error-handling tests for sync_branch and sync_pr_event
+
+
+class SyncCase(NamedTuple):
+    """A sync handler plus the event fixture and expectations its error tests share."""
+
+    handler: Callable
+    event_fixture: str
+    sha: str
+    success_log: str
+
+
+sync_cases = pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(
+            SyncCase(sync_branch, "mock_push_event", "sha-123", "Synced branch"),
+            id="sync_branch",
+        ),
+        pytest.param(
+            SyncCase(sync_pr_event, "mock_pr_event", "pr-sha-123", "Synced PR"),
+            id="sync_pr",
+        ),
+    ],
+)
+
+
+@pytest.mark.asyncio
+@sync_cases
+async def test_sync_config_error_sets_error_check(
+    case, request, mock_gh, mock_gl, mock_repligit_ops
+):
+    """An invalid repo config should be reported as a failed hubcast-error check."""
+
+    event = request.getfixturevalue(case.event_fixture)
+    mock_repligit_ops["get_repo_config"].side_effect = repo_config_error()
+
+    await case.handler(event=event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    mock_gh.set_check_status.assert_awaited_once_with(
+        case.sha,
+        ERROR_CHECK_NAME,
+        "failure",
+        title="config title",
+        summary="config summary",
+    )
+    mock_repligit_ops["send_pack"].assert_not_called()
+
+
+@pytest.mark.asyncio
+@sync_cases
+@pytest.mark.parametrize(
+    "failing_op,error,expected_title,expected_summary",
+    [
+        (
+            "ls_remote",
+            permission_error(401),
+            PERMISSION_DENIED_TITLE,
+            PERMISSION_DENIED_SUMMARY,
+        ),
+        (
+            "ls_remote",
+            permission_error(403),
+            PERMISSION_DENIED_TITLE,
+            PERMISSION_DENIED_SUMMARY,
+        ),
+        (
+            "send_pack",
+            permission_error(403),
+            PERMISSION_DENIED_TITLE,
+            PERMISSION_DENIED_SUMMARY,
+        ),
+        (
+            "send_pack",
+            Exception(HOOK_DECLINED_MSG),
+            HOOK_DECLINED_TITLE,
+            HOOK_DECLINED_SUMMARY,
+        ),
+    ],
+    ids=["ls_remote-401", "ls_remote-403", "send_pack-403", "send_pack-hook-declined"],
+)
+async def test_sync_expected_error_fails_check(
+    case,
+    failing_op,
+    error,
+    expected_title,
+    expected_summary,
+    request,
+    mock_gh,
+    mock_gl,
+    mock_repligit_ops,
+    caplog,
+):
+    """Permission and hook-declined errors during sync should fail the pipeline check."""
+
+    event = request.getfixturevalue(case.event_fixture)
+    mock_repligit_ops[failing_op].side_effect = error
+
+    await case.handler(event=event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    mock_gh.set_check_status.assert_awaited_once_with(
+        case.sha,
+        "hubcast",
+        "failure",
+        title=expected_title,
+        summary=expected_summary,
+    )
+    assert case.success_log not in caplog.text
+    if failing_op == "ls_remote":
+        assert PERMISSION_DENIED_SYNC_LOG_MSG in caplog.text
+        mock_repligit_ops["send_pack"].assert_not_called()
+
+
+@pytest.mark.asyncio
+@sync_cases
+async def test_sync_fetch_pack_failure_raises(
+    case, request, mock_gh, mock_gl, mock_repligit_ops
+):
+    """A missing packfile should raise instead of pushing nothing."""
+
+    event = request.getfixturevalue(case.event_fixture)
+    mock_repligit_ops["fetch_pack"].return_value = None
+
+    with pytest.raises(HubcastError, match="Failed to fetch packfile"):
+        await case.handler(event=event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+
+@pytest.mark.asyncio
+@sync_cases
+@pytest.mark.parametrize(
+    "failing_op,error",
+    [
+        ("ls_remote", permission_error(500)),
+        ("send_pack", permission_error(500)),
+        ("send_pack", Exception("connection reset")),
+    ],
+    ids=["ls_remote-http-500", "send_pack-http-500", "send_pack-generic"],
+)
+async def test_sync_other_error_raises(
+    case, failing_op, error, request, mock_gh, mock_gl, mock_repligit_ops
+):
+    """Unrecognized repligit errors during sync should propagate."""
+
+    event = request.getfixturevalue(case.event_fixture)
+    mock_repligit_ops[failing_op].side_effect = error
+
+    with pytest.raises(type(error)):
+        await case.handler(event=event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+    mock_gh.set_check_status.assert_not_called()
+
+
 # Tests for remove_pr
 
 
@@ -619,6 +941,110 @@ async def test_remove_pr_deleted(
     )
 
     assert "Deleted PR branch" in caplog.text
+
+
+# Shared error-handling tests for remove_branch and remove_pr
+
+
+class RemoveCase(NamedTuple):
+    """A removal handler plus the event fixture and expectations its error tests share."""
+
+    handler: Callable
+    event_fixture: str
+    ref: str
+    success_log: str
+
+
+remove_cases = pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(
+            RemoveCase(
+                remove_branch,
+                "mock_delete_event",
+                "refs/heads/feature-branch",
+                "Deleted branch",
+            ),
+            id="remove_branch",
+        ),
+        pytest.param(
+            RemoveCase(
+                remove_pr,
+                "mock_pr_closed_event",
+                "refs/heads/pr-123",
+                "Deleted PR branch",
+            ),
+            id="remove_pr",
+        ),
+    ],
+)
+
+
+@pytest.mark.asyncio
+@remove_cases
+async def test_remove_ls_remote_permission_denied(
+    case, request, mock_gh, mock_gl, mock_repligit_ops, caplog
+):
+    """Permission errors on deletion should be logged; there is no sha to attach a check to."""
+
+    event = request.getfixturevalue(case.event_fixture)
+    mock_repligit_ops["ls_remote"].side_effect = permission_error()
+
+    await case.handler(event=event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    assert PERMISSION_DENIED_DELETE_LOG_MSG in caplog.text
+    mock_gh.set_check_status.assert_not_called()
+    mock_repligit_ops["send_pack"].assert_not_called()
+
+
+@pytest.mark.asyncio
+@remove_cases
+@pytest.mark.parametrize(
+    "error,expected_log",
+    [
+        (permission_error(), PERMISSION_DENIED_DELETE_LOG_MSG),
+        (Exception(HOOK_DECLINED_MSG), HOOK_DECLINED_MSG),
+    ],
+    ids=["permission-denied", "hook-declined"],
+)
+async def test_remove_send_pack_swallowed_errors(
+    case, error, expected_log, request, mock_gh, mock_gl, mock_repligit_ops, caplog
+):
+    """Expected send_pack failures on deletion should be logged and not propagate."""
+
+    event = request.getfixturevalue(case.event_fixture)
+    mock_repligit_ops["ls_remote"].return_value = {case.ref: "dest-sha-123"}
+    mock_repligit_ops["send_pack"].side_effect = error
+
+    await case.handler(event=event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    assert expected_log in caplog.text
+    assert case.success_log not in caplog.text
+    mock_gh.set_check_status.assert_not_called()
+
+
+@pytest.mark.asyncio
+@remove_cases
+@pytest.mark.parametrize(
+    "failing_op,error",
+    [
+        ("ls_remote", permission_error(500)),
+        ("send_pack", permission_error(500)),
+        ("send_pack", Exception("connection reset")),
+    ],
+    ids=["ls_remote-http-500", "send_pack-http-500", "send_pack-generic"],
+)
+async def test_remove_other_error_raises(
+    case, failing_op, error, request, mock_gh, mock_gl, mock_repligit_ops
+):
+    """Unrecognized errors during deletion should propagate."""
+
+    event = request.getfixturevalue(case.event_fixture)
+    mock_repligit_ops["ls_remote"].return_value = {case.ref: "dest-sha-123"}
+    mock_repligit_ops[failing_op].side_effect = error
+
+    with pytest.raises(type(error)):
+        await case.handler(event=event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
 
 # Tests for respond_comment
@@ -856,6 +1282,132 @@ async def test_respond_comment_restart_jobs_variations(
     )
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error,expected_response,expected_log",
+    [
+        (
+            BadRequest(HTTPStatus(403), "forbidden"),
+            PERMISSION_DENIED_SUMMARY,
+            "Pipeline failed to start - insufficient permissions",
+        ),
+        (
+            BadRequest(HTTPStatus(403), DEACTIVATED_ACCOUNT_MARKER),
+            DEACTIVATED_ACCOUNT_MSG,
+            "Pipeline failed to start - insufficient permissions",
+        ),
+        (
+            BadRequest(HTTPStatus(400), "invalid CI config"),
+            PIPELINE_FAILED_MSG,
+            "Pipeline failed to start",
+        ),
+    ],
+)
+async def test_respond_comment_run_pipeline_errors(
+    error,
+    expected_response,
+    expected_log,
+    mock_comment_event,
+    mock_gh,
+    mock_gl,
+    mock_repligit_ops,
+    mock_pr_data_for_comment,
+    caplog,
+):
+    """Pipeline start failures should be explained to the user in a comment."""
+
+    mock_comment_event.data["comment"]["body"] = "@hubcast-bot run pipeline"
+    mock_gh.get_pr = AsyncMock(return_value=mock_pr_data_for_comment)
+    mock_gl.run_pipeline = AsyncMock(side_effect=error)
+
+    await respond_comment(
+        event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+    )
+
+    assert expected_log in caplog.text
+    mock_gh.post_comment.assert_awaited_once()
+    _, response = mock_gh.post_comment.await_args.args
+    assert expected_response in response
+    mock_gh.react_to_comment.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_respond_comment_run_pipeline_other_error_raises(
+    mock_comment_event, mock_gh, mock_gl, mock_repligit_ops, mock_pr_data_for_comment
+):
+    """Unrecognized pipeline start failures should propagate."""
+
+    mock_comment_event.data["comment"]["body"] = "@hubcast-bot run pipeline"
+    mock_gh.get_pr = AsyncMock(return_value=mock_pr_data_for_comment)
+    mock_gl.run_pipeline = AsyncMock(side_effect=BadRequest(HTTPStatus(500), "oops"))
+
+    with pytest.raises(BadRequest):
+        await respond_comment(
+            event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failing_call,expected_log",
+    [
+        ("get_latest_pipeline", "Pipeline ID fetch failed - insufficient permissions"),
+        ("retry_pipeline_jobs", "Jobs restart failed - insufficient permissions"),
+    ],
+)
+async def test_respond_comment_restart_jobs_permission_denied(
+    failing_call,
+    expected_log,
+    mock_comment_event,
+    mock_gh,
+    mock_gl,
+    mock_repligit_ops,
+    mock_pr_data_for_comment,
+    caplog,
+):
+    """Permission errors restarting jobs should be explained to the user in a comment."""
+
+    mock_comment_event.data["comment"]["body"] = "@hubcast-bot restart failed"
+    mock_gh.get_pr = AsyncMock(return_value=mock_pr_data_for_comment)
+    mock_gl.get_latest_pipeline = AsyncMock(return_value=789)
+    getattr(mock_gl, failing_call).side_effect = BadRequest(
+        HTTPStatus(403), "forbidden"
+    )
+
+    await respond_comment(
+        event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+    )
+
+    assert expected_log in caplog.text
+    mock_gh.post_comment.assert_awaited_once()
+    _, response = mock_gh.post_comment.await_args.args
+    assert PERMISSION_DENIED_SUMMARY in response
+    mock_gh.react_to_comment.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failing_call", ["get_latest_pipeline", "retry_pipeline_jobs"])
+async def test_respond_comment_restart_jobs_other_error_raises(
+    failing_call,
+    mock_comment_event,
+    mock_gh,
+    mock_gl,
+    mock_repligit_ops,
+    mock_pr_data_for_comment,
+):
+    """Unrecognized errors restarting jobs should propagate."""
+
+    mock_comment_event.data["comment"]["body"] = "@hubcast-bot restart failed"
+    mock_gh.get_pr = AsyncMock(return_value=mock_pr_data_for_comment)
+    mock_gl.get_latest_pipeline = AsyncMock(return_value=789)
+    getattr(mock_gl, failing_call).side_effect = BadRequest(HTTPStatus(500), "oops")
+
+    with pytest.raises(BadRequest):
+        await respond_comment(
+            event=mock_comment_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+        )
+
+
 # Tests for rerun_check
 
 
@@ -889,3 +1441,89 @@ async def test_check_rerun_requested(
     )
 
     assert "Rerun check requested for branch" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_rerun_check_config_error_sets_error_check(
+    mock_check_run_event, mock_gh, mock_gl, mock_repligit_ops
+):
+    """An invalid repo config should be reported as a failed hubcast-error check."""
+
+    mock_gh.get_branch.return_value = {"commit": {"sha": "check-run-sha-123"}}
+    mock_repligit_ops["get_repo_config"].side_effect = repo_config_error()
+
+    await rerun_check(
+        event=mock_check_run_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+    )
+
+    mock_gh.set_check_status.assert_awaited_once_with(
+        "check-run-sha-123",
+        ERROR_CHECK_NAME,
+        "failure",
+        title="config title",
+        summary="config summary",
+    )
+    mock_gl.run_pipeline.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error,expected_title,expected_summary",
+    [
+        (
+            BadRequest(HTTPStatus(403), "forbidden"),
+            PERMISSION_DENIED_TITLE,
+            PERMISSION_DENIED_SUMMARY,
+        ),
+        (
+            BadRequest(HTTPStatus(403), DEACTIVATED_ACCOUNT_MARKER),
+            DEACTIVATED_ACCOUNT_MSG,
+            "",
+        ),
+        (
+            BadRequest(HTTPStatus(400), "invalid CI config"),
+            PIPELINE_FAILED_MSG,
+            "invalid CI config",
+        ),
+    ],
+)
+async def test_rerun_check_pipeline_errors(
+    error,
+    expected_title,
+    expected_summary,
+    mock_check_run_event,
+    mock_gh,
+    mock_gl,
+    mock_repligit_ops,
+):
+    """Pipeline start failures during a check rerun should fail the check with details."""
+
+    mock_gh.get_branch.return_value = {"commit": {"sha": "check-run-sha-123"}}
+    mock_gl.run_pipeline = AsyncMock(side_effect=error)
+
+    await rerun_check(
+        event=mock_check_run_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+    )
+
+    mock_gh.set_check_status.assert_awaited_once_with(
+        "check-run-sha-123",
+        "hubcast",
+        "failure",
+        title=expected_title,
+        summary=expected_summary,
+    )
+
+
+@pytest.mark.asyncio
+async def test_rerun_check_pipeline_other_error_raises(
+    mock_check_run_event, mock_gh, mock_gl, mock_repligit_ops
+):
+    """Unrecognized pipeline start failures should propagate."""
+
+    mock_gh.get_branch.return_value = {"commit": {"sha": "check-run-sha-123"}}
+    mock_gl.run_pipeline = AsyncMock(side_effect=BadRequest(HTTPStatus(500), "oops"))
+
+    with pytest.raises(BadRequest):
+        await rerun_check(
+            event=mock_check_run_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+        )

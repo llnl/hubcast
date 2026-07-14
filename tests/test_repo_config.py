@@ -2,9 +2,14 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from hubcast.exceptions import HubcastError
+from hubcast.exceptions import HubcastError, RepoConfigError
 from hubcast.repos.config import RepoConfig
-from hubcast.web.github.utils import config_cache, get_repo_config
+from hubcast.web.github.messages import CONFIG_INVALID_SUMMARY, CONFIG_INVALID_TITLE
+from hubcast.web.github.utils import (
+    changed_files_from_push,
+    config_cache,
+    get_repo_config,
+)
 
 
 ### FIXTURES
@@ -163,8 +168,14 @@ async def test_get_repo_config_invalid_yaml():
     gh.repo_owner = "owner"
     gh.repo_name = "repo"
 
-    with pytest.raises(HubcastError, match="Invalid YAML in repo config"):
+    with pytest.raises(
+        RepoConfigError, match="Invalid YAML in repo config"
+    ) as exc_info:
         await get_repo_config(gh, "owner/repo")
+
+    # route handlers report these to the user via a failed check
+    assert exc_info.value.title == CONFIG_INVALID_TITLE
+    assert exc_info.value.summary == CONFIG_INVALID_SUMMARY
 
 
 @pytest.mark.asyncio
@@ -176,10 +187,12 @@ async def test_get_repo_config_missing_repo_key():
     gh.repo_owner = "owner"
     gh.repo_name = "repo"
 
-    with pytest.raises(HubcastError, match="Invalid repo config") as exc_info:
+    with pytest.raises(RepoConfigError, match="Invalid repo config") as exc_info:
         await get_repo_config(gh, "owner/repo")
 
     assert "top-level 'Repo' section" in exc_info.value.context["error"]
+    assert exc_info.value.title == CONFIG_INVALID_TITLE
+    assert exc_info.value.summary == CONFIG_INVALID_SUMMARY
 
 
 @pytest.mark.asyncio
@@ -191,7 +204,7 @@ async def test_get_repo_config_missing_required_fields():
     gh.repo_owner = "owner"
     gh.repo_name = "repo"
 
-    with pytest.raises(HubcastError, match="Invalid repo config") as exc_info:
+    with pytest.raises(RepoConfigError, match="Invalid repo config") as exc_info:
         await get_repo_config(gh, "owner/repo")
 
     assert "Field required" in exc_info.value.context["error"]
@@ -223,3 +236,34 @@ async def test_get_repo_config_not_found_from_cache():
 
     # should only call GH once since second call used cache
     gh.get_repo_config.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "payload,expected",
+    [
+        pytest.param(
+            {
+                "commits": [
+                    {"added": ["new.py"], "modified": ["src/app.py"], "removed": []},
+                    {
+                        "added": [],
+                        "modified": ["docs/readme.md"],
+                        "removed": ["old.py"],
+                    },
+                ]
+            },
+            {"new.py", "src/app.py", "docs/readme.md", "old.py"},
+            id="collects_all_commits",
+        ),
+        pytest.param(
+            {"commits": [{"added": ["new.py"]}]},
+            {"new.py"},
+            id="tolerates_missing_keys",
+        ),
+        pytest.param({"commits": []}, set(), id="empty"),
+    ],
+)
+def test_changed_files_from_push(payload, expected):
+    """Should collect changed paths across commits, tolerating missing keys."""
+
+    assert changed_files_from_push(payload) == expected
