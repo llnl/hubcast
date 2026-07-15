@@ -393,15 +393,15 @@ async def respond_pr_comment(
         log.info("Skipped comment - no command matched")
         return
 
-    if re.search(f"{gh.bot_caller} (mirror|approve)", comment, re.IGNORECASE):
+    if re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
         # sync PR changes to the destination on behalf of the commenter
         # does not handle PR deletions, those will need to be manually cleaned by project maintainers
 
-        # mirror requests must be tied to specific commit hashes to avoid unintended syncing of malicious commits
+        # approvals must be tied to specific commit hashes to avoid unintended syncing of malicious commits
         commit_sha = event.data["review"]["commit_id"]
         pull_request = event.data["pull_request"]
         src_repo_private = pull_request["head"]["repo"]["private"]
-        # mirror the commit tied the review comment
+        # sync the approved commit explicitly
         await sync_pr(
             pull_request,
             gh,
@@ -413,7 +413,9 @@ async def respond_pr_comment(
         )
         await gh.react_to_comment(event.data["review"]["node_id"], "+1")
 
-        log.info("Mirrored ref via review comment", extra={"ref": commit_sha})
+        log.info(
+            "Mirrored ref with approval from review comment", extra={"ref": commit_sha}
+        )
     else:
         log.info("Skipped PR review comment - no command matched")
 
@@ -442,13 +444,14 @@ async def respond_comment(
         log.info("Help message sent")
         action_logged = True
 
-    elif re.search(f"{gh.bot_caller} (mirror|approve)", comment, re.IGNORECASE):
+    elif re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
         response = (
             "To mirror this PR, please use the "
-            "[GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#trusted-mirroring). "
-            "This ensures the mirroring request is tied to a specific commit."
+            "[GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#approval). "
+            "This ensures the approval is tied to a specific "
+            "commit to avoid mirroring malicious data."
         )
-        log.info("Mirroring clarification sent")
+        log.info("Approval reminder sent")
         action_logged = True
 
     elif re.search(

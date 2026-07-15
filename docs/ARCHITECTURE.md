@@ -31,13 +31,13 @@ All inbound events received by Hubcast are considered untrusted until validated 
 
 By design, failures at the trust boundary, such as malformed events and unresolved identities, result in inaction rather than unsafe execution.
 
-## Identity, authorization, and trusted mirroring
+## Identity, authorization, and approval flow
 
 User actions handled by Hubcast originate from identities on the source forge but may result in execution on infrastructure governed by site-local policies. To safely bridge this gap, Hubcast includes a user mapping component as the authoritative source of identity linkage.
 
 When an event is received, Hubcast extracts the initiating source forge user and queries the user mapping to resolve the corresponding destination forge user. If no mapping exists, Hubcast treats the initiating user as unauthorized and will not perform state-changing actions.
 
-Hubcast authorized users to explicitly mirror unauthorized actions. When a mirror is initiated (via a comment on the source forge, see the [user guide](/docs/guide-user.md#hubcast-bot)), Hubcast performs the requested operation by assuming the identity of the commenter, ensuring that all actions remain subject to existing permission models.
+Hubcast allows for authorized users to "approve" unauthorized actions. When an approval is requested (via a comment on the source forge, see the [user guide](/docs/guide-user.md#hubcast-bot)), Hubcast performs the requested operation by assuming the identity of the approver, ensuring that all actions remain subject to existing permission models.
 
 Hubcast includes [implementations](/docs/guide-admin.md#account-maps) of account maps, allowing administrators of Hubcast instances to decide the best fit for their organization.
 
