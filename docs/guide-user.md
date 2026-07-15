@@ -116,7 +116,7 @@ The bot supports the following commands:
 Replace `@{bot}` with your instance's bot user (e.g., `@lc-hubcast`) or use `/hubcast` if no bot user is configured.
 
 ### Approval
-To securely sync commits from external collaborators, approvals must be done via commenting on a PR review, ensuring that it is linked to a specific commit.
+To securely mirror changes from external collaborators, approvals must be done via commenting on a PR review, ensuring that it is linked to a specific commit.
 
 ![A GitHub pull request review; the user has written a comment `@lc-hubcast approve` to sync the user's contributions.](/docs/img/approve-comment.png)
 
