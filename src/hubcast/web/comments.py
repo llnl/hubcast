@@ -2,14 +2,15 @@ def help_message(bot_caller: str) -> str:
     return f"""
 You can interact with me in many ways!
 
-- `{bot_caller} approve`: 
-    - Manually sync this PR to the destination repo
-    - Hubcast will perform syncs and run pipelines on behalf of the commenter
-- `{bot_caller} run pipeline`: request a new run of the GitLab CI pipeline
-- `{bot_caller} restart failed jobs`: restart any failed jobs in the most recent pipeline
+- `{bot_caller} approve`:
+    - Mirror this PR to the destination repo
+    - Hubcast will perform actions on behalf of the commenter
+    - Must be called using the [GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#approval)
+- `{bot_caller} restart pipeline`: request a restart of the latest GitLab CI pipeline
+- `{bot_caller} restart failed jobs`: restart any failed jobs in the latest pipeline
 - `{bot_caller} help`: see this message
 
-If you are an outside contributor, a maintainer will need to approve your commits using the [GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#approval).
+If you are an outside contributor, a maintainer will need to mirror your changes using the `{bot_caller} approve` command.
 
 A [user guide](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md) is available for additional details on Hubcast's functionality.
 

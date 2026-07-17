@@ -698,8 +698,6 @@ async def test_respond_pr_comment_commands(
 @pytest.mark.parametrize(
     "command",
     [
-        "@hubcast-bot run pipeline",
-        "@hubcast-bot start pipeline",
         "@hubcast-bot rerun pipeline",
         "@hubcast-bot re-run pipeline",
         "@hubcast-bot restart pipeline",
@@ -715,7 +713,7 @@ async def test_respond_comment_run_pipeline(
     mock_pr_data_for_comment,
     caplog,
 ):
-    """Should handle all variations of run/start pipeline command."""
+    """Should handle all variations of rerun/restart pipeline command."""
     mock_comment_event.data["comment"]["body"] = command
     mock_gh.get_pr = AsyncMock(return_value=mock_pr_data_for_comment)
     mock_gl.run_pipeline = AsyncMock(return_value="https://gitlab.com/pipeline/123")
@@ -761,7 +759,7 @@ async def test_respond_comment_run_pipeline_variations(
     caplog,
 ):
     """Should handle pipeline start for internal/fork PRs and success/failure."""
-    mock_comment_event.data["comment"]["body"] = "@hubcast-bot run pipeline"
+    mock_comment_event.data["comment"]["body"] = "@hubcast-bot rerun pipeline"
 
     if is_internal:
         mock_pr_data_for_comment["head"]["repo"]["full_name"] = "owner/repo"

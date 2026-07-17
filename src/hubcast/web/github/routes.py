@@ -446,16 +446,16 @@ async def respond_comment(
 
     elif re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
         response = (
-            "To approve syncing this PR, please use the "
-            "[GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#approval) "
-            "to submit an approval. This ensures approval is tied to a specific "
-            "commit to avoid the sync of malicious data."
+            "To mirror this PR, please use the "
+            "[GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#approval). "
+            "This ensures the approval is tied to a specific "
+            "commit to avoid mirroring malicious data."
         )
         log.info("Approval reminder sent")
         action_logged = True
 
     elif re.search(
-        f"{gh.bot_caller} (re[-]?)?(run|start) pipeline", comment, re.IGNORECASE
+        f"{gh.bot_caller} re[-]?(run|start) pipeline", comment, re.IGNORECASE
     ):
         # allows a project maintainer to restart the pipeline for a PR; should be
         # used for issues unrelated for code changes

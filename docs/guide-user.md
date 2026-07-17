@@ -62,8 +62,6 @@ Repo:
 > 
 > This restriction is in place for security purposes.
 
-Hubcast will sync changes via a force push if there has been a local change to the destination repository. To avoid issues, you may wish to disable the default force push branch protection rules on the destination repository.
-
 ## Installation
 
 Now that the source and destination repos are properly configured, we can install Hubcast into the source repository.
@@ -75,34 +73,35 @@ See the [admin guide](/docs/guide-admin.md#github-as-a-source-forge) for more de
 
 The app can be installed by a maintainer of the source repository.
 
-## Usage
-With Hubcast configured and installed, we can start using it to sync repository state and receive CI job status on the source repository.
+## Preparing the destination repository
 
-Any changes to PRs/MRs and branches will be automatically synced by Hubcast if they are initiated by an authorized user.
+Hubcast requires your destination repository to be configured with certain settings in order to facilitate secure mirroring and to help you avoid permissions issues.
 
-To be an authorized user, they must be in the Hubcast instance account map AND have write permissions to the destination repository.
+### User roles
 
-For example, if you want to sync a branch from GitHub → GitLab.com, your GitLab account must be registered in the mapping and be a member of the repository.
+Because Hubcast links identities between the source and destination forges, both accounts must have similar permissions on each repository.
 
-> [!NOTE]
-> Hubcast requires users to be assigned to the GitLab **developer** role to automatically sync commits to the destination forge.
-> If any unallowed action is performed, Hubcast will post a failed status check notifying users about unsuccessful syncs.
-> Review the [GitLab user roles](https://docs.gitlab.com/user/permissions) documentation for details on the permissions needed to perform repository actions.
+Members of your development team should be assigned to at least the GitLab **developer** role for Hubcast to automatically mirror contributions to the destination repository.
 
-### Webhook Setup
+If you do not want to add users to your destination repository or the user does not have an account, you can mirror commits [on their behalf](/docs/guide-user.md#approval).
 
-After installing Hubcast on your repository, the first push to the default branch will trigger webhook setup on the destination repository. This webhook allows CI status to be reported back to the source forge.
+If an unallowed action is performed, Hubcast will post a failed status check notifying users about unsuccessful actions.
 
-**Important:** Webhook creation requires the GitLab **maintainer** role. If the first push to the default branch is performed by a user with only the developer role:
-- Branch sync will succeed
-- Webhook will not be created
-- CI status will not be reported back
+### Changes to Hubcast configuration
+
+Hubcast propagates changes from the `hubcast.yml` file to a webhook on the destination repository. This webhook allows CI status to be reported back to the source forge.
+
+Webhook creation requires the GitLab **maintainer** role. In other words, all changes to the `hubcast.yml` file must be merged/pushed by a user with the maintainer role on the destination repository.
+
+If changes to Hubcast's configuration are pushed by a user without the maintainer role, Hubcast will continue to mirror commits between the source and destination repository, but any CI status may not be reported back to the source repo.
 
 To resolve this, have a user with the maintainer role push to the default branch; an empty commit is sufficient.
 
-If you expect contributions from users who aren't members of the destination repository or don't have accounts on the destination forge, Hubcast enables you to approve their requests via a bot-like interface.
+### Branch protection rules
 
-### Hubcast bot
+Hubcast may mirror changes via a force push, depending on the state of your repositories. To avoid issues, you may wish to disable the default force push branch protection rules on the destination repository.
+
+## Hubcast bot
 Depending on the setup of your Hubcast installation, you can request assistance from the bot by tagging an account (e.g., `@lc-hubcast help`) or the default `/hubcast help` in a PR/MR comment.
 
 > [!TIP]
@@ -110,16 +109,16 @@ Depending on the setup of your Hubcast installation, you can request assistance 
 
 The bot supports the following commands:
 - `@{bot} help` - Display available commands and usage information
-- `@{bot} approve` - Sync this pull request to the destination forge and trigger a new pipeline (requires maintainer permissions)
-- `@{bot} run pipeline` - Request a new run of the GitLab CI pipeline
+- `@{bot} approve` - Mirror this PR to the destination repo; Hubcast will push commits and run pipelines on behalf of the commenter
+- `@{bot} restart pipeline` - Request a restart of the latest GitLab CI pipeline
 - `@{bot} restart failed jobs` - Restart any failed jobs in the latest CI pipeline
 
 Replace `@{bot}` with your instance's bot user (e.g., `@lc-hubcast`) or use `/hubcast` if no bot user is configured.
 
-#### Approval
-To securely sync commits from external collaborators, approvals must be done via commenting on a PR review, ensuring that the approval is linked to a specific commit.
+### Approval
+To securely mirror changes from external collaborators, approvals must be done via commenting on a PR review, ensuring that it is linked to a specific commit.
 
 ![A GitHub pull request review; the user has written a comment `@lc-hubcast approve` to sync the user's contributions.](/docs/img/approve-comment.png)
 
 > [!NOTE]
-> Commenting on lines of code modified by the PR **will not** approve syncing; it must be done as shown above.
+> Commenting on lines of code modified by the PR **will not** initiate mirroring; it must be done as shown above.
