@@ -205,6 +205,7 @@ def mock_gh():
     gh.post_comment = AsyncMock()
     gh.react_to_comment = AsyncMock()
     gh.auth.authenticate_installation = AsyncMock(return_value="gh-token-123")
+    gh.repo_config_path = ".github/hubcast.yml"
     return gh
 
 

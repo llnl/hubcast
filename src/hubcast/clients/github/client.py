@@ -5,8 +5,6 @@ import aiohttp
 from gidgethub import HTTPException
 from gidgethub import aiohttp as gh_aiohttp
 
-from hubcast.repos.config import HUBCAST_CONFIG_PATH
-
 from .auth import GitHubAuthenticator
 
 log = logging.getLogger(__name__)
@@ -49,6 +47,8 @@ class GitHubClient:
         self.repo_owner = repo_owner
         self.repo_name = repo_name
         self.bot_caller = bot_caller
+        # path to the hubcast config file within a repository, relative to its root
+        self.repo_config_path = ".github/hubcast.yml"
 
     async def set_check_status(
         self,
@@ -131,7 +131,7 @@ class GitHubClient:
             gh = gh_aiohttp.GitHubAPI(session, self.requester, oauth_token=gh_token)
 
             # get the contents of the repository hubcast.yml file
-            url = f"/repos/{self.repo_owner}/{self.repo_name}/contents/{HUBCAST_CONFIG_PATH}"
+            url = f"/repos/{self.repo_owner}/{self.repo_name}/contents/{self.repo_config_path}"
             # get raw contents rather than base64 encoded text
             try:
                 return await gh.getitem(url, accept="application/vnd.github.raw")

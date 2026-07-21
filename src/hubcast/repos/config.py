@@ -2,9 +2,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-# path to the hubcast config file within a repository, relative to its root
-HUBCAST_CONFIG_PATH = ".github/hubcast.yml"
-
 
 class RepoConfig(BaseModel):
     """Repository configuration for mirroring and status checks"""

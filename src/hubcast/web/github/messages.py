@@ -42,7 +42,7 @@ INTERNAL_ERROR_SUMMARY = (
 )
 CONFIG_INVALID_TITLE = "Hubcast configuration file is invalid"
 CONFIG_INVALID_SUMMARY = (
-    "Hubcast could not parse `.github/hubcast.yml`. "
+    "Hubcast could not parse `hubcast.yml`. "
     f"Fix the configuration file and retry. See the [user guide]({CONFIG_DOCS_URL}) for details."
 )
 

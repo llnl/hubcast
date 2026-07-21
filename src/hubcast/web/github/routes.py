@@ -12,7 +12,6 @@ from hubcast.clients.github.client import GitHubClient
 from hubcast.clients.gitlab.client import GitLabClient
 from hubcast.exceptions import HubcastError, RepoConfigError, WebhookPermissionError
 from hubcast.logging import update_log_context
-from hubcast.repos.config import HUBCAST_CONFIG_PATH
 from hubcast.web.github.messages import (
     DEACTIVATED_ACCOUNT_MARKER,
     DEACTIVATED_ACCOUNT_MSG,
@@ -105,7 +104,7 @@ async def sync_branch(
     # only refresh config when a default branch push touches .github/hubcast.yml
     default_branch = event.data["repository"]["default_branch"]
     is_default_branch = sync_ref == f"refs/heads/{default_branch}"
-    config_changed = HUBCAST_CONFIG_PATH in changed_files_from_push(event.data)
+    config_changed = gh.repo_config_path in changed_files_from_push(event.data)
     try:
         repo_config, fetched = await get_repo_config(
             gh, src_fullname, refresh=is_default_branch and config_changed
