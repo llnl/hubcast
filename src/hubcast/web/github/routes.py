@@ -119,7 +119,8 @@ async def sync_branch(
 
     # only set/update webhook on default branch pushes when config cache was bypassed (refresh or initial fetch)
     # and if the config file itself was changed (config_changed above)
-    # we want to give maintainers the option to set the webhook with an empty commit hence the message checking
+    # we want to give maintainers the option to force-set the webhook; an empty commit won't result in a cache miss
+    # if the commit message contains [hubcast config], we'll set the webhook
     if is_default_branch and (fetched or "[hubcast config]" in commit_msg):
         # setup callback webhook on GitLab
         try:

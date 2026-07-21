@@ -94,7 +94,7 @@ Webhook creation requires the GitLab **maintainer** role. In other words, all ch
 
 If changes to Hubcast's configuration are pushed by a user without the maintainer role, Hubcast will continue to mirror commits between the source and destination repository, but any CI status may not be reported back to the source repo.
 
-To resolve this, have a user with the maintainer role push to the default branch; an empty commit is sufficient.
+To resolve this without making changes to the configuration, a user with the maintainer role can push to the default branch with `[hubcast config]` in the commit message; an empty commit is sufficient.
 
 ### Branch protection rules
 
