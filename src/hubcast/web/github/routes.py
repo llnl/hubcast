@@ -6,6 +6,7 @@ from aiohttp.client_exceptions import ClientResponseError
 from gidgethub import routing, sansio
 from gidgetlab.exceptions import BadRequest
 from repligit.asyncio import fetch_pack, ls_remote, send_pack
+from repligit.exceptions import RefUpdateRejected
 
 from hubcast.clients.github.client import GitHubClient
 from hubcast.clients.gitlab.client import GitLabClient
@@ -222,16 +223,17 @@ async def sync_branch(
         )
         return
     # repligit
-    except Exception as exc:
-        if str(exc) != HOOK_DECLINED_MSG:
-            raise
+    except RefUpdateRejected as exc:
+        hook_declined = str(exc) == HOOK_DECLINED_MSG
         await gh.set_check_status(
             want_sha,
             repo_config.check_name,
             "failure",
-            title=HOOK_DECLINED_TITLE,
-            summary=HOOK_DECLINED_SUMMARY,
+            title=HOOK_DECLINED_TITLE if hook_declined else INTERNAL_ERROR_TITLE,
+            summary=HOOK_DECLINED_SUMMARY if hook_declined else INTERNAL_ERROR_SUMMARY,
         )
+        if not hook_declined:
+            raise
         return
 
     log.info("Synced branch")
@@ -293,8 +295,9 @@ async def remove_branch(
         log.info(PERMISSION_DENIED_DELETE_LOG_MSG)
         return
     # repligit
-    except Exception as exc:
+    except RefUpdateRejected as exc:
         if str(exc) != HOOK_DECLINED_MSG:
+            # raise unknown ref update rejected errors for later debugging
             raise
         log.info(str(exc))
         return
@@ -440,16 +443,19 @@ async def sync_pr(
             )
             return
         # repligit
-        except Exception as exc:
-            if str(exc) != HOOK_DECLINED_MSG:
-                raise
+        except RefUpdateRejected as exc:
+            hook_declined = str(exc) == HOOK_DECLINED_MSG
             await gh.set_check_status(
                 want_sha,
                 repo_config.check_name,
                 "failure",
-                title=HOOK_DECLINED_TITLE,
-                summary=HOOK_DECLINED_SUMMARY,
+                title=HOOK_DECLINED_TITLE if hook_declined else INTERNAL_ERROR_TITLE,
+                summary=HOOK_DECLINED_SUMMARY
+                if hook_declined
+                else INTERNAL_ERROR_SUMMARY,
             )
+            if not hook_declined:
+                raise
             return
 
         log.info("Synced PR")
@@ -571,7 +577,7 @@ async def remove_pr(
         log.info(PERMISSION_DENIED_DELETE_LOG_MSG)
         return
     # repligit
-    except Exception as exc:
+    except RefUpdateRejected as exc:
         if str(exc) != HOOK_DECLINED_MSG:
             raise
         log.info(str(exc))

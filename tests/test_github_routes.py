@@ -9,6 +9,7 @@ import pytest
 from aiohttp.client_exceptions import ClientResponseError
 from gidgethub import sansio
 from gidgetlab.exceptions import BadRequest
+from repligit.exceptions import RefUpdateRejected
 
 from hubcast.exceptions import HubcastError, RepoConfigError, WebhookPermissionError
 from hubcast.web.github.messages import (
@@ -792,7 +793,7 @@ async def test_sync_config_error_sets_error_check(
         ),
         (
             "send_pack",
-            Exception(HOOK_DECLINED_MSG),
+            RefUpdateRejected(HOOK_DECLINED_MSG),
             HOOK_DECLINED_TITLE,
             HOOK_DECLINED_SUMMARY,
         ),
@@ -829,6 +830,29 @@ async def test_sync_expected_error_fails_check(
     if failing_op == "ls_remote":
         assert PERMISSION_DENIED_SYNC_LOG_MSG in caplog.text
         mock_repligit_ops["send_pack"].assert_not_called()
+
+
+@pytest.mark.asyncio
+@sync_cases
+async def test_sync_ref_update_rejected_other_reason_reports_and_raises(
+    case, request, mock_gh, mock_gl, mock_repligit_ops
+):
+    """A RefUpdateRejected reason other than the hook-declined message should still
+    fail the check for user visibility, but raise so Hubcast admins can debug."""
+
+    event = request.getfixturevalue(case.event_fixture)
+    mock_repligit_ops["send_pack"].side_effect = RefUpdateRejected("non-fast-forward")
+
+    with pytest.raises(RefUpdateRejected):
+        await case.handler(event=event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    mock_gh.set_check_status.assert_awaited_once_with(
+        case.sha,
+        "hubcast",
+        "failure",
+        title=INTERNAL_ERROR_TITLE,
+        summary=INTERNAL_ERROR_SUMMARY,
+    )
 
 
 @pytest.mark.asyncio
@@ -1003,7 +1027,7 @@ async def test_remove_ls_remote_permission_denied(
     "error,expected_log",
     [
         (permission_error(), PERMISSION_DENIED_DELETE_LOG_MSG),
-        (Exception(HOOK_DECLINED_MSG), HOOK_DECLINED_MSG),
+        (RefUpdateRejected(HOOK_DECLINED_MSG), HOOK_DECLINED_MSG),
     ],
     ids=["permission-denied", "hook-declined"],
 )
@@ -1031,8 +1055,14 @@ async def test_remove_send_pack_swallowed_errors(
         ("ls_remote", permission_error(500)),
         ("send_pack", permission_error(500)),
         ("send_pack", Exception("connection reset")),
+        ("send_pack", RefUpdateRejected("non-fast-forward")),
     ],
-    ids=["ls_remote-http-500", "send_pack-http-500", "send_pack-generic"],
+    ids=[
+        "ls_remote-http-500",
+        "send_pack-http-500",
+        "send_pack-generic",
+        "send_pack-ref-rejected-other-reason",
+    ],
 )
 async def test_remove_other_error_raises(
     case, failing_op, error, request, mock_gh, mock_gl, mock_repligit_ops
@@ -1316,7 +1346,7 @@ async def test_respond_comment_run_pipeline_errors(
 ):
     """Pipeline start failures should be explained to the user in a comment."""
 
-    mock_comment_event.data["comment"]["body"] = "@hubcast-bot run pipeline"
+    mock_comment_event.data["comment"]["body"] = "@hubcast-bot rerun pipeline"
     mock_gh.get_pr = AsyncMock(return_value=mock_pr_data_for_comment)
     mock_gl.run_pipeline = AsyncMock(side_effect=error)
 
@@ -1337,7 +1367,7 @@ async def test_respond_comment_run_pipeline_other_error_raises(
 ):
     """Unrecognized pipeline start failures should propagate."""
 
-    mock_comment_event.data["comment"]["body"] = "@hubcast-bot run pipeline"
+    mock_comment_event.data["comment"]["body"] = "@hubcast-bot rerun pipeline"
     mock_gh.get_pr = AsyncMock(return_value=mock_pr_data_for_comment)
     mock_gl.run_pipeline = AsyncMock(side_effect=BadRequest(HTTPStatus(500), "oops"))
 
