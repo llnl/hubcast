@@ -89,7 +89,7 @@ jobs:
     uses: ./.github/workflows/coverage.yml
 
   container:
-    if: always() && needs.changes.outputs.container == 'true'
+    if: ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && needs.changes.outputs.container == 'true' }}
     needs: [changes, style, security]
     uses: ./.github/workflows/container.yml
     permissions:
