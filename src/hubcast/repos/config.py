@@ -46,3 +46,10 @@ class RepoConfig(BaseModel):
 
         # fallback to Pydantic's other validators if the input data isn't a dict
         return data
+
+    @model_validator(mode="after")
+    def require_pipeline_check(self) -> "RepoConfig":
+        """Ensure the "pipeline" check is always enabled, regardless of user config. This is used to pass error messages back to the user."""
+        if "pipeline" not in self.check_types:
+            object.__setattr__(self, "check_types", [*self.check_types, "pipeline"])
+        return self

@@ -1,16 +1,31 @@
 import logging
+from typing import Any
 
 import yaml
 from cachetools import TTLCache
 
 from hubcast.clients.github import GitHubClient
-from hubcast.exceptions import HubcastError
+from hubcast.exceptions import HubcastError, RepoConfigError
 from hubcast.repos.config import RepoConfig
+from hubcast.web.github.messages import (
+    CONFIG_INVALID_SUMMARY,
+    CONFIG_INVALID_TITLE,
+)
 
 log = logging.getLogger(__name__)
 
 # Shared cache for repository configs with 30-minute TTL
 config_cache: TTLCache[str, RepoConfig | None] = TTLCache(maxsize=1000, ttl=1800)
+
+
+def changed_files_from_push(payload: dict[str, Any]) -> set[str]:
+    """Collect all file paths touched by the commits in a push payload."""
+    return {
+        f
+        for c in payload["commits"]
+        for key in ("added", "modified", "removed")
+        for f in c.get(key, ())
+    }
 
 
 async def get_repo_config(
@@ -36,10 +51,9 @@ async def get_repo_config(
         log.info("Repo config retrieved from cache")
         if config is None:
             # raise so route handlers can't continue
-            raise HubcastError(
-                "Config file not found",
-                log_level="INFO",
-            )
+            # we don't want to raise this as a RepoConfigError because telling users
+            # about the absence of the config will create noise and confusion
+            raise HubcastError("Repo config file not found", log_level="INFO")
         return config, False
 
     # cache miss or refresh requested, fetch from GH
@@ -49,26 +63,27 @@ async def get_repo_config(
         config_cache[fullname] = None
         log.info("Cached absence of repo config")
         # raise so route handlers can't continue
-        raise HubcastError(
-            "Repo config file not found",
-            log_level="INFO",
-        )
+        raise HubcastError("Repo config file not found", log_level="INFO")
 
     # parse and validate YAML
     try:
         config_yaml = yaml.safe_load(fetched_config)
     except yaml.YAMLError as e:
-        raise HubcastError(
-            f"Invalid YAML in repo config for {fullname}: {e}",
-            log_level="INFO",
+        raise RepoConfigError(
+            "Invalid YAML in repo config",
+            title=CONFIG_INVALID_TITLE,
+            summary=CONFIG_INVALID_SUMMARY,
+            error=str(e),
         )
 
     try:
         config = RepoConfig.model_validate(config_yaml)
     except ValueError as e:
-        raise HubcastError(
-            f"Invalid repo config for {fullname}: {e}",
-            log_level="INFO",
+        raise RepoConfigError(
+            "Invalid repo config",
+            title=CONFIG_INVALID_TITLE,
+            summary=CONFIG_INVALID_SUMMARY,
+            error=str(e),
         )
 
     config_cache[fullname] = config
