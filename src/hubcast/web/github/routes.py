@@ -787,6 +787,38 @@ async def respond_comment(
         log.info("Skipped comment - no command matched")
 
 
+# job and pipeline checks are created with a details_url pointing
+# at the corresponding GitLab job/pipeline (see job_status_relay and pipeline_status_relay in web/gitlab/routes.py)
+JOB_DETAILS_URL_RE = re.compile(r"/-/jobs/(\d+)/?$")
+PIPELINE_DETAILS_URL_RE = re.compile(r"/-/pipelines/(\d+)/?$")
+
+
+async def _fail_check_from_pipeline_error(
+    gh: GitHubClient,
+    check_name: str,
+    check_run_commit: str,
+    exc: BadRequest,
+) -> None:
+    """Set a failing check status from a GitLab pipeline/job start error."""
+    if exc.status_code in PERMISSION_DENIED_STATUSES:
+        deactivated = DEACTIVATED_ACCOUNT_MARKER in str(exc)
+        message = DEACTIVATED_ACCOUNT_MSG if deactivated else PERMISSION_DENIED_TITLE
+        summary = "" if deactivated else PERMISSION_DENIED_SUMMARY
+    elif exc.status_code == 400:
+        message = PIPELINE_FAILED_MSG
+        summary = str(exc)
+    else:
+        # unknown issues
+        raise exc
+    await gh.set_check_status(
+        check_run_commit,
+        check_name,
+        "failure",
+        title=message,
+        summary=summary,
+    )
+
+
 @router.register("check_run", action="rerequested")
 async def rerun_check(
     event: sansio.Event,
@@ -797,30 +829,25 @@ async def rerun_check(
     **kwargs,
 ) -> None:
     """
-    Handles a user re-running a check run for the latest commit in the branch.
+    Handles a user re-running a check run by retrying the specific GitLab job or pipeline it's attached to.
     See https://docs.github.com/en/webhooks/webhook-events-and-payloads?actionType=rerequested#check_run.
     """
     src_fullname = event.data["repository"]["full_name"]
-    branch = event.data["check_run"]["check_suite"]["head_branch"]
     check_run_commit = event.data["check_run"]["head_sha"]
+    details_url = event.data["check_run"]["details_url"]
+    update_log_context(
+        check_run_commit=check_run_commit, check_run_id=event.data["check_run"]["id"]
+    )
 
-    # get the latest commit on the branch from GH
-    branch_data = await gh.get_branch(branch)
-    latest_commit = branch_data["commit"]["sha"]
+    job_match = JOB_DETAILS_URL_RE.search(details_url)
+    pipeline_match = PIPELINE_DETAILS_URL_RE.search(details_url)
 
-    # only rerun if this commit is the head of the branch
-    if check_run_commit != latest_commit:
-        log.info(
-            "Skipped check rerun - old commit",
-            extra={
-                "branch": branch,
-                "check_run_commit": check_run_commit,
-                "latest_commit": latest_commit,
-            },
+    if not any((job_match, pipeline_match)):
+        log.warning(
+            "Skipped check rerun due to unrecognized check type",
         )
         return
 
-    # get the GL repo info and run the pipeline
     try:
         repo_config, _ = await get_repo_config(gh, src_fullname)
     except RepoConfigError as exc:
@@ -829,33 +856,25 @@ async def rerun_check(
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
 
-    try:
-        await gl.run_pipeline(dest_fullname, branch)
-    except BadRequest as exc:
-        if exc.status_code in PERMISSION_DENIED_STATUSES:
-            deactivated = DEACTIVATED_ACCOUNT_MARKER in str(exc)
-            message = (
-                DEACTIVATED_ACCOUNT_MSG if deactivated else PERMISSION_DENIED_TITLE
+    if job_match:
+        job_id = int(job_match.group(1))
+        update_log_context(job_id=job_id)
+        try:
+            await gl.retry_job(dest_fullname, job_id)
+        except BadRequest as exc:
+            await _fail_check_from_pipeline_error(
+                gh, repo_config.check_name, check_run_commit, exc
             )
-            summary = "" if deactivated else PERMISSION_DENIED_SUMMARY
-        elif exc.status_code == 400:
-            message = PIPELINE_FAILED_MSG
-            summary = str(exc)
-        else:
-            raise
-        await gh.set_check_status(
-            check_run_commit,
-            repo_config.check_name,
-            "failure",
-            title=message,
-            summary=summary,
-        )
-        return
-
-    log.info(
-        "Rerun check requested for branch",
-        extra={
-            "branch": branch,
-            "check_run_commit": check_run_commit,
-        },
-    )
+            return
+        log.info("Retried job for check run")
+    elif pipeline_match:
+        pipeline_id = int(pipeline_match.group(1))
+        update_log_context(pipeline_id=pipeline_id)
+        try:
+            await gl.retry_pipeline_jobs(dest_fullname, pipeline_id)
+        except BadRequest as exc:
+            await _fail_check_from_pipeline_error(
+                gh, repo_config.check_name, check_run_commit, exc
+            )
+            return
+        log.info("Retried failed jobs for check run")
