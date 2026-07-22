@@ -1603,7 +1603,9 @@ async def test_rerun_check_pipeline_retry_other_error_raises(
 ):
     """Unrecognized pipeline retry failures should propagate."""
 
-    mock_gl.retry_pipeline_jobs = AsyncMock(side_effect=BadRequest(HTTPStatus(500), "oops"))
+    mock_gl.retry_pipeline_jobs = AsyncMock(
+        side_effect=BadRequest(HTTPStatus(500), "oops")
+    )
 
     with pytest.raises(BadRequest):
         await rerun_check(
