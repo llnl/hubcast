@@ -182,13 +182,15 @@ def mock_pr_data_for_comment():
 
 @pytest.fixture
 def mock_check_run_event():
-    """Mocked check run rerequested."""
+    """Mocked check run rerequested, tracking a GitLab pipeline."""
     event = Mock()
     event.data = {
         "repository": {"full_name": "owner/repo"},
         "check_run": {
+            "id": 999,
             "check_suite": {"head_branch": "main"},
             "head_sha": "check-run-sha-123",
+            "details_url": "https://gitlab.example.com/owner/repo/-/pipelines/456",
         },
     }
     return event
@@ -1443,35 +1445,62 @@ async def test_respond_comment_restart_jobs_other_error_raises(
 
 
 @pytest.mark.asyncio
-async def test_check_rerun_skip_old_commit(
+async def test_rerun_check_pipeline_retry(
     mock_check_run_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
-    """Check rerun should be skipped if the latest commit on the branch does not equal the check run commit."""
-
-    # the branch's latest commit is different from the check run's head_sha
-    mock_gh.get_branch.return_value = {"commit": {"sha": "latest-sha-456"}}
+    """A rerequest on a pipeline-tracking check should retry that pipeline's failed jobs."""
 
     await rerun_check(
         event=mock_check_run_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert "Skipped check rerun - old commit" in caplog.text
+    mock_gl.retry_pipeline_jobs.assert_awaited_once_with("owner/repo", 456)
+    mock_gl.retry_job.assert_not_called()
+    assert "Retried failed jobs for check run" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_check_rerun_requested(
+async def test_rerun_check_job_retry(
     mock_check_run_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
-    """Check rerun should be requested if all conditions are met."""
+    """A rerequest on a job-tracking check should retry just that job."""
 
-    # latest commit on the branch matches the check run head_sha
-    mock_gh.get_branch.return_value = {"commit": {"sha": "check-run-sha-123"}}
+    mock_check_run_event.data["check_run"]["details_url"] = (
+        "https://gitlab.example.com/owner/repo/-/jobs/789"
+    )
 
     await rerun_check(
         event=mock_check_run_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
     )
 
-    assert "Rerun check requested for branch" in caplog.text
+    mock_gl.retry_job.assert_awaited_once_with("owner/repo", 789)
+    mock_gl.retry_pipeline_jobs.assert_not_called()
+    assert "Retried job for check run" in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "details_url",
+    [
+        "",
+        "https://hubcast.example.com",
+        "https://gitlab.example.com/owner/repo/-/pipelines/not-a-number",
+    ],
+)
+async def test_rerun_check_unrecognized_check_skipped(
+    details_url, mock_check_run_event, mock_gh, mock_gl, mock_repligit_ops, caplog
+):
+    """A check whose details_url doesn't match a known job/pipeline shape should be skipped, not retried."""
+
+    mock_check_run_event.data["check_run"]["details_url"] = details_url
+
+    await rerun_check(
+        event=mock_check_run_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+    )
+
+    mock_gl.retry_job.assert_not_called()
+    mock_gl.retry_pipeline_jobs.assert_not_called()
+    assert "Skipped check rerun due to unrecognized check type" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -1480,7 +1509,6 @@ async def test_rerun_check_config_error_sets_error_check(
 ):
     """An invalid repo config should be reported as a failed hubcast-error check."""
 
-    mock_gh.get_branch.return_value = {"commit": {"sha": "check-run-sha-123"}}
     mock_repligit_ops["get_repo_config"].side_effect = repo_config_error()
 
     await rerun_check(
@@ -1494,7 +1522,8 @@ async def test_rerun_check_config_error_sets_error_check(
         title="config title",
         summary="config summary",
     )
-    mock_gl.run_pipeline.assert_not_called()
+    mock_gl.retry_pipeline_jobs.assert_not_called()
+    mock_gl.retry_job.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -1518,7 +1547,7 @@ async def test_rerun_check_config_error_sets_error_check(
         ),
     ],
 )
-async def test_rerun_check_pipeline_errors(
+async def test_rerun_check_pipeline_retry_errors(
     error,
     expected_title,
     expected_summary,
@@ -1527,10 +1556,9 @@ async def test_rerun_check_pipeline_errors(
     mock_gl,
     mock_repligit_ops,
 ):
-    """Pipeline start failures during a check rerun should fail the check with details."""
+    """Pipeline retry failures during a check rerun should fail the check with details."""
 
-    mock_gh.get_branch.return_value = {"commit": {"sha": "check-run-sha-123"}}
-    mock_gl.run_pipeline = AsyncMock(side_effect=error)
+    mock_gl.retry_pipeline_jobs = AsyncMock(side_effect=error)
 
     await rerun_check(
         event=mock_check_run_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
@@ -1546,13 +1574,36 @@ async def test_rerun_check_pipeline_errors(
 
 
 @pytest.mark.asyncio
-async def test_rerun_check_pipeline_other_error_raises(
+async def test_rerun_check_job_retry_permission_denied(
     mock_check_run_event, mock_gh, mock_gl, mock_repligit_ops
 ):
-    """Unrecognized pipeline start failures should propagate."""
+    """Job retry failures during a check rerun should fail the check the same way pipeline retries do."""
 
-    mock_gh.get_branch.return_value = {"commit": {"sha": "check-run-sha-123"}}
-    mock_gl.run_pipeline = AsyncMock(side_effect=BadRequest(HTTPStatus(500), "oops"))
+    mock_check_run_event.data["check_run"]["details_url"] = (
+        "https://gitlab.example.com/owner/repo/-/jobs/789"
+    )
+    mock_gl.retry_job = AsyncMock(side_effect=BadRequest(HTTPStatus(403), "forbidden"))
+
+    await rerun_check(
+        event=mock_check_run_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user"
+    )
+
+    mock_gh.set_check_status.assert_awaited_once_with(
+        "check-run-sha-123",
+        "hubcast",
+        "failure",
+        title=PERMISSION_DENIED_TITLE,
+        summary=PERMISSION_DENIED_SUMMARY,
+    )
+
+
+@pytest.mark.asyncio
+async def test_rerun_check_pipeline_retry_other_error_raises(
+    mock_check_run_event, mock_gh, mock_gl, mock_repligit_ops
+):
+    """Unrecognized pipeline retry failures should propagate."""
+
+    mock_gl.retry_pipeline_jobs = AsyncMock(side_effect=BadRequest(HTTPStatus(500), "oops"))
 
     with pytest.raises(BadRequest):
         await rerun_check(

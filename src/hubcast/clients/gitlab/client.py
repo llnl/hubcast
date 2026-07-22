@@ -309,6 +309,31 @@ class GitLabClient:
 
             return pipeline.get("web_url")
 
+    async def retry_job(self, gl_fullname: str, job_id: int) -> str:
+        """retries a single job in a GitLab pipeline.
+        Returns:
+            the job's url
+        """
+
+        gl_token = await self.auth.authenticate_user(self.user)
+
+        async with aiohttp.ClientSession() as session:
+            gl = gidgetlab.aiohttp.GitLabAPI(
+                session,
+                requester=self.requester,
+                access_token=gl_token,
+                url=self.instance_url,
+            )
+
+            # temporary fix to support gitlab deployments in sub-paths
+            gl.api_url = f"{self.instance_url}/api/v4/"
+
+            repo_id = urllib.parse.quote_plus(gl_fullname)
+
+            job = await gl.post(f"/projects/{repo_id}/jobs/{job_id}/retry", data={})
+
+            return job.get("web_url")
+
     async def get_commit(self, gl_fullname: str, sha: str) -> dict:
         """Get details for a commit SHA in a project"""
         gl_token = await self.auth.authenticate_user(self.user)
