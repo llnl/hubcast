@@ -642,33 +642,13 @@ async def test_sync_pr_synced_internal(
 
 
 @pytest.mark.asyncio
-async def test_sync_pr_opened_uses_head_sha(
-    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
+@pytest.mark.parametrize("action", ["opened", "reopened", "ready_for_review"])
+async def test_sync_pr_uses_head_sha(
+    action, mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
-    """PR opened event should use head sha instead of after field."""
+    """PR sync events other than synchronize should use head sha instead of the after field."""
 
-    # Change action to "opened" instead of "synchronize"
-    mock_pr_event.data["action"] = "opened"
-    mock_pr_event.data["pull_request"]["head"]["sha"] = "head-sha-456"
-
-    mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
-
-    await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
-
-    assert "Synced PR" in caplog.text
-    assert any(
-        hasattr(record, "want_sha") and record.want_sha == "head-sha-456"
-        for record in caplog.records
-    )
-
-
-@pytest.mark.asyncio
-async def test_sync_pr_ready_for_review(
-    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
-):
-    """Marking a draft PR ready for review should trigger a sync using the head sha."""
-
-    mock_pr_event.data["action"] = "ready_for_review"
+    mock_pr_event.data["action"] = action
     mock_pr_event.data["pull_request"]["head"]["sha"] = "head-sha-456"
 
     mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
