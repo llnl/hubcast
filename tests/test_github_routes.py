@@ -663,6 +663,36 @@ async def test_sync_pr_opened_uses_head_sha(
 
 
 @pytest.mark.asyncio
+async def test_sync_pr_ready_for_review(
+    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
+):
+    """Marking a draft PR ready for review should trigger a sync using the head sha."""
+
+    mock_pr_event.data["action"] = "ready_for_review"
+    mock_pr_event.data["pull_request"]["head"]["sha"] = "head-sha-456"
+
+    mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
+
+    await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    assert "Synced PR" in caplog.text
+    assert any(
+        hasattr(record, "want_sha") and record.want_sha == "head-sha-456"
+        for record in caplog.records
+    )
+
+
+def test_sync_pr_event_registered_for_ready_for_review():
+    """The router must dispatch pull_request/ready_for_review to sync_pr_event."""
+    from hubcast.web.github.routes import router
+
+    callbacks = router._deep_routes["pull_request"]["action"].get(
+        "ready_for_review", []
+    )
+    assert sync_pr_event in callbacks
+
+
+@pytest.mark.asyncio
 async def test_sync_pr_creates_mr_when_configured(
     mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
