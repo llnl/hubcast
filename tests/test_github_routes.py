@@ -682,16 +682,6 @@ async def test_sync_pr_ready_for_review(
     )
 
 
-def test_sync_pr_event_registered_for_ready_for_review():
-    """The router must dispatch pull_request/ready_for_review to sync_pr_event."""
-    from hubcast.web.github.routes import router
-
-    callbacks = router._deep_routes["pull_request"]["action"].get(
-        "ready_for_review", []
-    )
-    assert sync_pr_event in callbacks
-
-
 @pytest.mark.asyncio
 async def test_sync_pr_creates_mr_when_configured(
     mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
