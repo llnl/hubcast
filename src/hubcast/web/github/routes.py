@@ -115,7 +115,8 @@ async def sync_branch(
 
     dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
-    commit_msg = event.data.get("head_commit", {}).get("message", "")
+    head_commit = event.data.get("head_commit")
+    commit_msg = head_commit["message"] if head_commit else ""
 
     # only set/update webhook on default branch pushes when config cache was bypassed (refresh or initial fetch)
     # and if the config file itself was changed (config_changed above)
