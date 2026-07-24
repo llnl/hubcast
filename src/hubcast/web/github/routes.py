@@ -479,6 +479,7 @@ async def sync_pr(
 @router.register("pull_request", action="opened")
 @router.register("pull_request", action="reopened")
 @router.register("pull_request", action="synchronize")
+@router.register("pull_request", action="ready_for_review")
 async def sync_pr_event(
     event: sansio.Event,
     gh: GitHubClient,
