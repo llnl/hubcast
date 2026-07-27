@@ -1,5 +1,6 @@
 import jwt
 import pytest
+from pydantic import ValidationError
 
 from hubcast.webhook import RoutingToken, RoutingTokenError
 
@@ -63,7 +64,7 @@ class TestRoutingToken:
     def test_token_immutable(self, token_data):
         """Should not allow modification of token fields."""
         token = RoutingToken(**token_data)
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             token.gh_owner = "new-owner"
 
     def test_encode_basic_fields(self, secret):

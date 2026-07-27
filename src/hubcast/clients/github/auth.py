@@ -1,5 +1,5 @@
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import aiohttp
 import gidgethub.apps as gha
@@ -82,7 +82,7 @@ class GitHubAuthenticator:
         """Convert UTC ISO 8601 time stamp to seconds in epoch"""
         dt = datetime.fromisoformat(iso_string)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return int(dt.timestamp())
 
     async def get_jwt(self) -> str:

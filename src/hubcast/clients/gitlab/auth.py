@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta, timezone
-from typing import Iterable
+from collections.abc import Iterable
+from datetime import UTC, datetime, timedelta
 
 import aiohttp
 import gidgetlab.aiohttp
@@ -110,7 +110,7 @@ class GitLabAuthenticator:
     @staticmethod
     def _date_after_days(days: int) -> tuple[str, int]:
         """Returns UTC date string in YYYY-MM-DD format and midnight UTC timestamp."""
-        dt = (datetime.now(timezone.utc) + timedelta(days=days)).replace(
+        dt = (datetime.now(UTC) + timedelta(days=days)).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
         return dt.strftime("%Y-%m-%d"), int(dt.timestamp())
