@@ -64,8 +64,9 @@ class TestRoutingToken:
     def test_token_immutable(self, token_data):
         """Should not allow modification of token fields."""
         token = RoutingToken(**token_data)
+        field = "gh_owner"
         with pytest.raises(ValidationError):
-            token.gh_owner = "new-owner"
+            setattr(token, field, "new-owner")
 
     def test_encode_basic_fields(self, secret):
         """Should encode and decode all basic fields correctly."""
