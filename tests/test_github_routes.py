@@ -232,6 +232,7 @@ def mock_repligit_ops():
         default_config = Mock(
             dest_org="owner",
             dest_name="repo",
+            dest_fullname="owner/repo",
             sync_drafts=True,
             sync_drafts_msg=True,
             delete_closed=True,
@@ -566,7 +567,12 @@ async def test_sync_pr_skip_draft(
 
     mock_pr_event.data["pull_request"]["draft"] = True
     mock_repligit_ops["get_repo_config"].return_value = (
-        Mock(sync_drafts=False, dest_org="owner", dest_name="repo"),
+        Mock(
+            sync_drafts=False,
+            dest_org="owner",
+            dest_name="repo",
+            dest_fullname="owner/repo",
+        ),
         True,
     )
 
@@ -588,6 +594,7 @@ async def test_sync_pr_skip_draft_without_message(
             sync_drafts_msg=False,
             dest_org="owner",
             dest_name="repo",
+            dest_fullname="owner/repo",
         ),
         True,
     )
@@ -679,6 +686,7 @@ async def test_sync_pr_creates_mr_when_configured(
         Mock(
             dest_org="owner",
             dest_name="repo",
+            dest_fullname="owner/repo",
             create_mr=True,
         ),
         True,
@@ -706,6 +714,7 @@ async def test_sync_pr_skips_mr_when_already_exists(
         Mock(
             dest_org="owner",
             dest_name="repo",
+            dest_fullname="owner/repo",
             create_mr=True,
         ),
         True,
@@ -907,7 +916,12 @@ async def test_remove_pr_skip_delete_closed_false(
 
     # Configure repo to NOT delete branches on PR close
     mock_repligit_ops["get_repo_config"].return_value = (
-        Mock(delete_closed=False, dest_org="owner", dest_name="repo"),
+        Mock(
+            delete_closed=False,
+            dest_org="owner",
+            dest_name="repo",
+            dest_fullname="owner/repo",
+        ),
         True,
     )
 
