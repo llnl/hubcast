@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic import ValidationError
 
 from hubcast.exceptions import HubcastError, RepoConfigError
 from hubcast.repos.config import RepoConfig
@@ -114,7 +115,7 @@ def test_validator_with_non_dict():
     """Should handle non-dict input by passing through to other validators."""
     # The validator should pass through non-dict data
     # This will fail validation at a later stage, but exercises the fallback path
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         RepoConfig.model_validate("not a dict")
 
 

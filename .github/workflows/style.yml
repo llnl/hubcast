@@ -30,9 +30,8 @@ jobs:
 
       - name: Run Ruff
         run: |
-          ruff check --diff
-          ruff check --select I --diff
-          ruff format --check --diff
+          ruff check
+          ruff format --check
 
       - name: Run Type Checker
         run: ty check

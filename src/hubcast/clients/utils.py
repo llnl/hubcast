@@ -1,5 +1,5 @@
 import time
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 
 class TokenCache:
