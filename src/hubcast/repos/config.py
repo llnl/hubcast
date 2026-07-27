@@ -31,6 +31,10 @@ class RepoConfig(BaseModel):
     # synthetic merge commits between the branch and the default branch
     create_mr: bool = False
 
+    @property
+    def dest_fullname(self) -> str:
+        return f"{self.dest_org}/{self.dest_name}"
+
     @model_validator(mode="before")
     @classmethod
     def extract_repo_section(cls, data: Any) -> Any:

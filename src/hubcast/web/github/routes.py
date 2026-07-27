@@ -113,7 +113,7 @@ async def sync_branch(
         await report_config_error(gh, want_sha, exc)
         return
 
-    dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
+    dest_fullname = repo_config.dest_fullname
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
     head_commit = event.data.get("head_commit")
     commit_msg = head_commit["message"] if head_commit else ""
@@ -254,7 +254,7 @@ async def remove_branch(
 
     repo_config, _ = await get_repo_config(gh, src_fullname)
 
-    dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
+    dest_fullname = repo_config.dest_fullname
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
 
     gl_token = await gl.auth.authenticate_user(gl_user)
@@ -369,7 +369,7 @@ async def sync_pr(
         log.info("Skipped PR sync - draft PR")
         return
 
-    dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
+    dest_fullname = repo_config.dest_fullname
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
     gl_token = await gl.auth.authenticate_user(gl_user)
 
@@ -542,7 +542,7 @@ async def remove_pr(
 
     update_log_context(ref=sync_ref)
 
-    dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
+    dest_fullname = repo_config.dest_fullname
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
     gl_token = await gl.auth.authenticate_user(gl_user)
 
@@ -694,7 +694,7 @@ async def respond_comment(
 
         # get the gitlab repo information and run the pipeline
         repo_config, _ = await get_repo_config(gh, base_fullname)
-        dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
+        dest_fullname = repo_config.dest_fullname
 
         try:
             pipeline_url = await gl.run_pipeline(dest_fullname, branch)
@@ -743,7 +743,7 @@ async def respond_comment(
 
         # get the gitlab repo information and run the pipeline
         repo_config, _ = await get_repo_config(gh, base_fullname)
-        dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
+        dest_fullname = repo_config.dest_fullname
 
         try:
             pipeline_id = await gl.get_latest_pipeline(dest_fullname, branch)
@@ -856,7 +856,7 @@ async def rerun_check(
         await report_config_error(gh, check_run_commit, exc)
         return
 
-    dest_fullname = f"{repo_config.dest_org}/{repo_config.dest_name}"
+    dest_fullname = repo_config.dest_fullname
 
     if job_match:
         job_id = int(job_match.group(1))
