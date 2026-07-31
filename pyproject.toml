@@ -10,7 +10,7 @@ dependencies = [
     "aiojobs",
     "cachetools",
     "gidgethub",
-    "gidgetlab",
+    "gidgetlab>=2.1.2",
     "pydantic",
     "pydantic-settings",
     "pyjwt",

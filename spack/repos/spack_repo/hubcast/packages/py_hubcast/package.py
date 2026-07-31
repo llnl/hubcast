@@ -27,7 +27,7 @@ class PyHubcast(PythonPackage):
     depends_on("py-aiojobs", type=("build", "run"))
     depends_on("py-pyjwt", type=("build", "run"))
     depends_on("py-gidgethub", type=("build", "run"))
-    depends_on("py-gidgetlab+aiohttp", type=("build", "run"))
+    depends_on("py-gidgetlab@2.1.2:+aiohttp", type=("build", "run"))
     depends_on("py-repligit", type=("build", "run"))
     depends_on("py-pyyaml", type=("build", "run"))
     depends_on("py-pydantic", type=("build", "run"))
