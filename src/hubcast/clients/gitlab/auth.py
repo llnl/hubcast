@@ -65,9 +65,6 @@ class GitLabAuthenticator:
                     url=self.instance_url,
                 )
 
-                # temporary fix to support gitlab deployments in sub-paths
-                gl.api_url = f"{self.instance_url}/api/v4/"
-
                 url = f"/users/{user_id}/impersonation_tokens"
                 expires_day, expires_timestamp = self._date_after_days(expire_days)
 
@@ -98,9 +95,6 @@ class GitLabAuthenticator:
                 access_token=self.admin_token,
                 url=self.instance_url,
             )
-
-            # temporary fix to support gitlab deployments in sub-paths
-            gl.api_url = f"{self.instance_url}/api/v4/"
 
             res = await gl.getitem(f"/users?username={username}")
             if not res:
