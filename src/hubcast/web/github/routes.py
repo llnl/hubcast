@@ -106,7 +106,7 @@ async def sync_branch(
     is_default_branch = sync_ref == f"refs/heads/{default_branch}"
     config_changed = gh.repo_config_path in changed_files_from_push(event.data)
     try:
-        repo_config, fetched = await get_repo_config(
+        repo_config = await get_repo_config(
             gh, src_fullname, refresh=is_default_branch and config_changed
         )
     except RepoConfigError as exc:
@@ -118,11 +118,12 @@ async def sync_branch(
     head_commit = event.data.get("head_commit")
     commit_msg = head_commit["message"] if head_commit else ""
 
-    # only set/update webhook on default branch pushes when config cache was bypassed (refresh or initial fetch)
-    # and if the config file itself was changed (config_changed above)
-    # we want to give maintainers the option to force-set the webhook; an empty commit won't result in a cache miss
-    # if the commit message contains [hubcast config], we'll set the webhook
-    if is_default_branch and (fetched or "[hubcast config]" in commit_msg):
+    # only set/update webhook on default branch pushes when the push actually
+    # touched the config file (config_changed above); this avoids spurious
+    # permission errors when the config merely aged out of the cache
+    # we also give maintainers the option to force-set the webhook: if the
+    # commit message contains [hubcast config], we'll set the webhook
+    if is_default_branch and (config_changed or "[hubcast config]" in commit_msg):
         # setup callback webhook on GitLab
         try:
             await gl.set_webhook(
@@ -252,7 +253,7 @@ async def remove_branch(
     src_fullname = event.data["repository"]["full_name"]
     sync_ref = event.data["ref"]
 
-    repo_config, _ = await get_repo_config(gh, src_fullname)
+    repo_config = await get_repo_config(gh, src_fullname)
 
     dest_fullname = repo_config.dest_fullname
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
@@ -353,7 +354,7 @@ async def sync_pr(
 
     # get the repository configuration from .github/hubcast.yml
     try:
-        repo_config, _ = await get_repo_config(gh, base_fullname)
+        repo_config = await get_repo_config(gh, base_fullname)
     except RepoConfigError as exc:
         await report_config_error(gh, want_sha, exc)
         return
@@ -523,7 +524,7 @@ async def remove_pr(
     base_fullname = pull_request["base"]["repo"]["full_name"]
 
     # get the repository configuration from .github/hubcast.yml
-    repo_config, _ = await get_repo_config(gh, base_fullname)
+    repo_config = await get_repo_config(gh, base_fullname)
 
     if not repo_config.delete_closed:
         log.info("Skipped PR branch removal - delete_closed disabled")
@@ -693,7 +694,7 @@ async def respond_comment(
         update_log_context(branch=branch)
 
         # get the gitlab repo information and run the pipeline
-        repo_config, _ = await get_repo_config(gh, base_fullname)
+        repo_config = await get_repo_config(gh, base_fullname)
         dest_fullname = repo_config.dest_fullname
 
         try:
@@ -742,7 +743,7 @@ async def respond_comment(
         update_log_context(branch=branch)
 
         # get the gitlab repo information and run the pipeline
-        repo_config, _ = await get_repo_config(gh, base_fullname)
+        repo_config = await get_repo_config(gh, base_fullname)
         dest_fullname = repo_config.dest_fullname
 
         try:
@@ -851,7 +852,7 @@ async def rerun_check(
         return
 
     try:
-        repo_config, _ = await get_repo_config(gh, src_fullname)
+        repo_config = await get_repo_config(gh, src_fullname)
     except RepoConfigError as exc:
         await report_config_error(gh, check_run_commit, exc)
         return
