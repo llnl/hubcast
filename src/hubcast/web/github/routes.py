@@ -588,50 +588,36 @@ async def remove_pr(
     log.info("Deleted PR branch")
 
 
-@router.register("pull_request_review", action="submitted")
-async def respond_pr_comment(
-    event: sansio.Event,
-    gh: GitHubClient,
-    gl: GitLabClient,
-    gl_user: str,
-    *arg,
-    **kwargs,
-) -> None:
-    comment = event.data["review"]["body"]
+def _permission_denied_response(exc: BadRequest) -> str:
+    """Build a user-facing message for a GitLab permission-denied error."""
+    if DEACTIVATED_ACCOUNT_MARKER in str(exc):
+        return DEACTIVATED_ACCOUNT_MSG
+    return PERMISSION_DENIED_SUMMARY
 
-    # reviews without comments (plain approvals or RFC)
-    if not comment:
-        log.info("Skipped comment - no command matched")
-        return
 
-    if re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
-        # sync PR changes to the destination on behalf of the commenter
-        # does not handle PR deletions, those will need to be manually cleaned by project maintainers
+async def _pr_pipeline_target(gh: GitHubClient, pr_number: int) -> tuple[str, str]:
+    """Resolve the GitLab branch and destination repo for a PR's pipeline."""
+    pull_request = await gh.get_pr(pr_number)
+    src_fullname = pull_request["head"]["repo"]["full_name"]
+    base_fullname = pull_request["base"]["repo"]["full_name"]
 
-        # approvals must be tied to specific commit hashes to avoid unintended syncing of malicious commits
-        commit_sha = event.data["review"]["commit_id"]
-        pull_request = event.data["pull_request"]
-        src_repo_private = pull_request["head"]["repo"]["private"]
-        # sync the approved commit explicitly
-        await sync_pr(
-            pull_request,
-            gh,
-            gl,
-            gl_user,
-            src_repo_private,
-            want_sha=commit_sha,
-            default_branch=event.data["repository"]["default_branch"],
-        )
-        await gh.react_to_comment(event.data["review"]["node_id"], "+1")
-
-        log.info(
-            "Mirrored ref with approval from review comment", extra={"ref": commit_sha}
-        )
+    # pull requests coming from forks are pushed as branches in the form of
+    # pr-<pr-number> instead of as their branch name as conflicts could occur
+    # between multiple repositories
+    is_pull_request_fork = src_fullname != base_fullname
+    if is_pull_request_fork:
+        branch = f"pr-{pr_number}"
     else:
-        log.info("Skipped PR review comment - no command matched")
+        branch = pull_request["head"]["ref"]
+
+    update_log_context(branch=branch)
+
+    repo_config, _ = await get_repo_config(gh, base_fullname)
+    return branch, repo_config.dest_fullname
 
 
 @router.register("issue_comment", action="created")
+@router.register("pull_request_review", action="submitted")
 async def respond_comment(
     event: sansio.Event,
     gh: GitHubClient,
@@ -640,12 +626,25 @@ async def respond_comment(
     *arg,
     **kwargs,
 ) -> None:
-    # differentiate issue vs PR comment
-    if "pull_request" not in event.data["issue"]:
-        log.info("Skipped comment - not PR comment")
-        return
+    is_review = event.event == "pull_request_review"
 
-    comment = event.data["comment"]["body"]
+    if is_review:
+        comment = event.data["review"]["body"]
+        # reviews without comments (plain approvals or RFC)
+        if not comment:
+            log.info("Skipped comment - no command matched")
+            return
+        pr_number = event.data["pull_request"]["number"]
+        comment_node_id = event.data["review"]["node_id"]
+    else:
+        # differentiate issue vs PR comment
+        if "pull_request" not in event.data["issue"]:
+            log.info("Skipped comment - not PR comment")
+            return
+        comment = event.data["comment"]["body"]
+        pr_number = event.data["issue"]["number"]
+        comment_node_id = event.data["comment"]["node_id"]
+
     response = None
     plus_one = False
     action_logged = False
@@ -656,14 +655,38 @@ async def respond_comment(
         action_logged = True
 
     elif re.search(f"{gh.bot_caller} approve", comment, re.IGNORECASE):
-        response = (
-            "To mirror this PR, please use the "
-            "[GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#approval). "
-            "This ensures the approval is tied to a specific "
-            "commit to avoid mirroring malicious data."
-        )
-        log.info("Approval reminder sent")
         action_logged = True
+        if is_review:
+            # sync PR changes to the destination on behalf of the commenter
+            # does not handle PR deletions, those will need to be manually cleaned by project maintainers
+
+            # approvals must be tied to specific commit hashes to avoid unintended syncing of malicious commits
+            commit_sha = event.data["review"]["commit_id"]
+            pull_request = event.data["pull_request"]
+            src_repo_private = pull_request["head"]["repo"]["private"]
+            # sync the approved commit explicitly
+            await sync_pr(
+                pull_request,
+                gh,
+                gl,
+                gl_user,
+                src_repo_private,
+                want_sha=commit_sha,
+                default_branch=event.data["repository"]["default_branch"],
+            )
+            plus_one = True
+            log.info(
+                "Mirrored ref with approval from review comment",
+                extra={"ref": commit_sha},
+            )
+        else:
+            response = (
+                "To mirror this PR, please use the "
+                "[GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#approval). "
+                "This ensures the approval is tied to a specific "
+                "commit to avoid mirroring malicious data."
+            )
+            log.info("Approval reminder sent")
 
     elif re.search(
         f"{gh.bot_caller} re[-]?(run|start) pipeline", comment, re.IGNORECASE
@@ -672,39 +695,15 @@ async def respond_comment(
         # used for issues unrelated for code changes
         # this process will not sync changes, as an external collaborator could
         # submit malicious changes and trigger a sync without explicit approval
-        # on the commit hash (see `respond_pr_comment`)
+        # on the commit hash (see the `approve` review handling above)
         action_logged = True
-        pull_request_id = event.data["issue"]["number"]
-        pull_request = await gh.get_pr(pull_request_id)
-
-        # get the branch this PR belongs to
-        src_fullname = pull_request["head"]["repo"]["full_name"]
-        base_fullname = pull_request["base"]["repo"]["full_name"]
-
-        # pull requests coming from forks are pushed as branches in the form of
-        # pr-<pr-number> instead of as their branch name as conflicts could occur
-        # between multiple repositories
-        is_pull_request_fork = src_fullname != base_fullname
-        if is_pull_request_fork:
-            branch = f"pr-{pull_request_id}"
-        else:
-            branch = pull_request["head"]["ref"]
-
-        update_log_context(branch=branch)
-
-        # get the gitlab repo information and run the pipeline
-        repo_config, _ = await get_repo_config(gh, base_fullname)
-        dest_fullname = repo_config.dest_fullname
+        branch, dest_fullname = await _pr_pipeline_target(gh, pr_number)
 
         try:
             pipeline_url = await gl.run_pipeline(dest_fullname, branch)
         except BadRequest as exc:
             if exc.status_code in PERMISSION_DENIED_STATUSES:
-                response = (
-                    DEACTIVATED_ACCOUNT_MSG
-                    if DEACTIVATED_ACCOUNT_MARKER in str(exc)
-                    else PERMISSION_DENIED_SUMMARY
-                )
+                response = _permission_denied_response(exc)
                 log.info("Pipeline failed to start - insufficient permissions")
             elif exc.status_code == 400:
                 # \n to avoid indent markdown issues
@@ -724,37 +723,14 @@ async def respond_comment(
         # we don't want to re-sync the branch, as a new pipeline would be created
         # and would defeat the purpose of individually restarting failed jobs
         action_logged = True
-        pull_request_id = event.data["issue"]["number"]
-        pull_request = await gh.get_pr(pull_request_id)
-
-        # get the branch this PR belongs to
-        src_fullname = pull_request["head"]["repo"]["full_name"]
-        base_fullname = pull_request["base"]["repo"]["full_name"]
-        # pull requests coming from forks are pushed as branches in the form of
-        # pr-<pr-number> instead of as their branch name as conflicts could occur
-        # between multiple repositories
-        is_pull_request_fork = src_fullname != base_fullname
-        if is_pull_request_fork:
-            branch = f"pr-{pull_request_id}"
-        else:
-            branch = pull_request["head"]["ref"]
-
-        update_log_context(branch=branch)
-
-        # get the gitlab repo information and run the pipeline
-        repo_config, _ = await get_repo_config(gh, base_fullname)
-        dest_fullname = repo_config.dest_fullname
+        branch, dest_fullname = await _pr_pipeline_target(gh, pr_number)
 
         try:
             pipeline_id = await gl.get_latest_pipeline(dest_fullname, branch)
         except BadRequest as exc:
             if exc.status_code not in PERMISSION_DENIED_STATUSES:
                 raise
-            response = (
-                DEACTIVATED_ACCOUNT_MSG
-                if DEACTIVATED_ACCOUNT_MARKER in str(exc)
-                else PERMISSION_DENIED_SUMMARY
-            )
+            response = _permission_denied_response(exc)
             log.info("Pipeline ID fetch failed - insufficient permissions")
         else:
             if pipeline_id:
@@ -765,11 +741,7 @@ async def respond_comment(
                 except BadRequest as exc:
                     if exc.status_code not in PERMISSION_DENIED_STATUSES:
                         raise
-                    response = (
-                        DEACTIVATED_ACCOUNT_MSG
-                        if DEACTIVATED_ACCOUNT_MARKER in str(exc)
-                        else PERMISSION_DENIED_SUMMARY
-                    )
+                    response = _permission_denied_response(exc)
                     log.info("Jobs restart failed - insufficient permissions")
                 else:
                     response = f"I've retried any failed jobs in the [pipeline]({pipeline_url})!"
@@ -780,10 +752,10 @@ async def respond_comment(
                 log.info("No pipeline found for branch")
 
     if response:
-        await gh.post_comment(event.data["issue"]["number"], response)
+        await gh.post_comment(pr_number, response)
 
     if plus_one:
-        await gh.react_to_comment(event.data["comment"]["node_id"], "+1")
+        await gh.react_to_comment(comment_node_id, "+1")
 
     if not action_logged:
         log.info("Skipped comment - no command matched")

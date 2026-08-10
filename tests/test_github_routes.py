@@ -34,7 +34,6 @@ from hubcast.web.github.routes import (
     remove_pr,
     rerun_check,
     respond_comment,
-    respond_pr_comment,
     router,
     sync_branch,
     sync_pr_event,
@@ -132,6 +131,7 @@ def mock_pr_closed_event():
 def mock_comment_event():
     """Mocked pull request comment."""
     event = Mock()
+    event.event = "issue_comment"
     event.data = {
         "issue": {
             "number": 123,
@@ -146,6 +146,7 @@ def mock_comment_event():
 def mock_review_event(mock_pr_data_for_comment):
     """Mocked pull request review."""
     event = Mock()
+    event.event = "pull_request_review"
     event.data = {
         "repository": {
             "full_name": "owner/repo",
@@ -305,12 +306,12 @@ def call_respond_comment(mock_comment_event, mock_gh, mock_gl):
 
 
 @pytest.fixture
-def call_respond_pr_comment(mock_review_event, mock_gh, mock_gl):
-    """Helper to call respond_pr_comment with a given command."""
+def call_respond_review_comment(mock_review_event, mock_gh, mock_gl):
+    """Helper to call respond_comment with a review event and a given command."""
 
     async def _call(command_body):
         mock_review_event.data["review"]["body"] = command_body
-        return await respond_pr_comment(mock_review_event, mock_gh, mock_gl, "gl-user")
+        return await respond_comment(mock_review_event, mock_gh, mock_gl, "gl-user")
 
     return _call
 
@@ -1138,18 +1139,18 @@ async def test_respond_comment_simple_commands(
             "Mirrored ref with approval from review comment",
             True,
         ),
-        ("Looks good to me!", "Skipped PR review comment - no command matched", False),
+        ("Looks good to me!", "Skipped comment - no command matched", False),
         (None, "Skipped comment - no command matched", False),
     ],
 )
-async def test_respond_pr_comment_commands(
+async def test_respond_review_comment_commands(
     command,
     expected_log,
     needs_pr_setup,
     mock_gh,
     mock_repligit_ops,
     mock_pr_data_for_comment,
-    call_respond_pr_comment,
+    call_respond_review_comment,
     caplog,
 ):
     """Should handle PR review comments (approve or no command)."""
@@ -1157,7 +1158,7 @@ async def test_respond_pr_comment_commands(
         mock_gh.get_pr = AsyncMock(return_value=mock_pr_data_for_comment)
         mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
 
-    await call_respond_pr_comment(command)
+    await call_respond_review_comment(command)
 
     assert expected_log in caplog.text
 
