@@ -9,6 +9,10 @@ spack:
   - py-pip
   - py-hubcast+ldap
   - py-bandit
+  - py-coverage
+  - py-pytest
+  - py-pytest-asyncio
+  - py-pytest-mock
   - py-ruff
   - py-ty
   - smee-client
