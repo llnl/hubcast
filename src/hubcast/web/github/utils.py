@@ -30,7 +30,7 @@ def changed_files_from_push(payload: dict[str, Any]) -> set[str]:
 
 async def get_repo_config(
     gh: GitHubClient, fullname: str, refresh: bool = False
-) -> tuple[RepoConfig, bool]:
+) -> RepoConfig:
     """Get repository configuration from cache or fetch from GitHub.
 
     Args:
@@ -39,7 +39,7 @@ async def get_repo_config(
         refresh: Whether to force refresh from GitHub
 
     Returns:
-        Tuple of (RepoConfig instance, whether it was freshly fetched)
+        RepoConfig instance
 
     Raises:
         HubcastError: If config file contains invalid YAML, is missing required keys,
@@ -54,7 +54,7 @@ async def get_repo_config(
             # we don't want to raise this as a RepoConfigError because telling users
             # about the absence of the config will create noise and confusion
             raise HubcastError("Repo config file not found", log_level="INFO")
-        return config, False
+        return config
 
     # cache miss or refresh requested, fetch from GH
     fetched_config = await gh.get_repo_config()
@@ -88,4 +88,4 @@ async def get_repo_config(
 
     config_cache[fullname] = config
     log.info("Repo config fetched from source forge")
-    return config, True
+    return config
