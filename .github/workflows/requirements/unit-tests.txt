@@ -4,7 +4,7 @@ cachetools==7.1.7
 coverage==7.15.4
 gidgethub==5.4.0
 gidgetlab==2.1.2
-hatchling==1.31.0
+hatchling==1.32.0
 pytest-asyncio==1.4.0
 pytest-mock==3.15.1
 pytest==9.1.1
