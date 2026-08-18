@@ -588,34 +588,6 @@ async def remove_pr(
     log.info("Deleted PR branch")
 
 
-def _permission_denied_response(exc: BadRequest) -> str:
-    """Build a user-facing message for a GitLab permission-denied error."""
-    if DEACTIVATED_ACCOUNT_MARKER in str(exc):
-        return DEACTIVATED_ACCOUNT_MSG
-    return PERMISSION_DENIED_SUMMARY
-
-
-async def _pr_pipeline_target(gh: GitHubClient, pr_number: int) -> tuple[str, str]:
-    """Resolve the GitLab branch and destination repo for a PR's pipeline."""
-    pull_request = await gh.get_pr(pr_number)
-    src_fullname = pull_request["head"]["repo"]["full_name"]
-    base_fullname = pull_request["base"]["repo"]["full_name"]
-
-    # pull requests coming from forks are pushed as branches in the form of
-    # pr-<pr-number> instead of as their branch name as conflicts could occur
-    # between multiple repositories
-    is_pull_request_fork = src_fullname != base_fullname
-    if is_pull_request_fork:
-        branch = f"pr-{pr_number}"
-    else:
-        branch = pull_request["head"]["ref"]
-
-    update_log_context(branch=branch)
-
-    repo_config, _ = await get_repo_config(gh, base_fullname)
-    return branch, repo_config.dest_fullname
-
-
 @router.register("issue_comment", action="created")
 @router.register("pull_request_review", action="submitted")
 async def respond_comment(
@@ -697,13 +669,36 @@ async def respond_comment(
         # submit malicious changes and trigger a sync without explicit approval
         # on the commit hash (see the `approve` review handling above)
         action_logged = True
-        branch, dest_fullname = await _pr_pipeline_target(gh, pr_number)
+        pull_request = await gh.get_pr(pr_number)
+
+        # get the branch this PR belongs to
+        src_fullname = pull_request["head"]["repo"]["full_name"]
+        base_fullname = pull_request["base"]["repo"]["full_name"]
+
+        # pull requests coming from forks are pushed as branches in the form of
+        # pr-<pr-number> instead of as their branch name as conflicts could occur
+        # between multiple repositories
+        is_pull_request_fork = src_fullname != base_fullname
+        if is_pull_request_fork:
+            branch = f"pr-{pr_number}"
+        else:
+            branch = pull_request["head"]["ref"]
+
+        update_log_context(branch=branch)
+
+        # get the gitlab repo information and run the pipeline
+        repo_config, _ = await get_repo_config(gh, base_fullname)
+        dest_fullname = repo_config.dest_fullname
 
         try:
             pipeline_url = await gl.run_pipeline(dest_fullname, branch)
         except BadRequest as exc:
             if exc.status_code in PERMISSION_DENIED_STATUSES:
-                response = _permission_denied_response(exc)
+                response = (
+                    DEACTIVATED_ACCOUNT_MSG
+                    if DEACTIVATED_ACCOUNT_MARKER in str(exc)
+                    else PERMISSION_DENIED_SUMMARY
+                )
                 log.info("Pipeline failed to start - insufficient permissions")
             elif exc.status_code == 400:
                 # \n to avoid indent markdown issues
@@ -723,14 +718,36 @@ async def respond_comment(
         # we don't want to re-sync the branch, as a new pipeline would be created
         # and would defeat the purpose of individually restarting failed jobs
         action_logged = True
-        branch, dest_fullname = await _pr_pipeline_target(gh, pr_number)
+        pull_request = await gh.get_pr(pr_number)
+
+        # get the branch this PR belongs to
+        src_fullname = pull_request["head"]["repo"]["full_name"]
+        base_fullname = pull_request["base"]["repo"]["full_name"]
+        # pull requests coming from forks are pushed as branches in the form of
+        # pr-<pr-number> instead of as their branch name as conflicts could occur
+        # between multiple repositories
+        is_pull_request_fork = src_fullname != base_fullname
+        if is_pull_request_fork:
+            branch = f"pr-{pr_number}"
+        else:
+            branch = pull_request["head"]["ref"]
+
+        update_log_context(branch=branch)
+
+        # get the gitlab repo information and run the pipeline
+        repo_config, _ = await get_repo_config(gh, base_fullname)
+        dest_fullname = repo_config.dest_fullname
 
         try:
             pipeline_id = await gl.get_latest_pipeline(dest_fullname, branch)
         except BadRequest as exc:
             if exc.status_code not in PERMISSION_DENIED_STATUSES:
                 raise
-            response = _permission_denied_response(exc)
+            response = (
+                DEACTIVATED_ACCOUNT_MSG
+                if DEACTIVATED_ACCOUNT_MARKER in str(exc)
+                else PERMISSION_DENIED_SUMMARY
+            )
             log.info("Pipeline ID fetch failed - insufficient permissions")
         else:
             if pipeline_id:
@@ -741,7 +758,11 @@ async def respond_comment(
                 except BadRequest as exc:
                     if exc.status_code not in PERMISSION_DENIED_STATUSES:
                         raise
-                    response = _permission_denied_response(exc)
+                    response = (
+                        DEACTIVATED_ACCOUNT_MSG
+                        if DEACTIVATED_ACCOUNT_MARKER in str(exc)
+                        else PERMISSION_DENIED_SUMMARY
+                    )
                     log.info("Jobs restart failed - insufficient permissions")
                 else:
                     response = f"I've retried any failed jobs in the [pipeline]({pipeline_url})!"
