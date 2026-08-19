@@ -182,6 +182,9 @@ async def sync_branch(
 
     update_log_context(from_sha=from_sha, want_sha=want_sha)
 
+    # directly check from_sha equals want_sha for cases where the sha has
+    # already been mirrored but the ref is out-of-date. This is commonly the
+    # case for tags that are created against an existing commit on a branch.
     if from_sha == want_sha:
         log.info("Skipped branch sync - already up-to-date")
         return
@@ -393,6 +396,9 @@ async def sync_pr(
     from_sha = gl_refs.get(sync_ref) or ("0" * 40)
     update_log_context(from_sha=from_sha, want_sha=want_sha)
 
+    # directly check from_sha equals want_sha for cases where the sha has
+    # already been mirrored but the ref is out-of-date. This is commonly the
+    # case for tags that are created against an existing commit on a branch.
     if from_sha == want_sha:
         log.info("Skipped PR sync - already up-to-date")
     else:  # needs sync
