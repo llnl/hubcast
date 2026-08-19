@@ -395,6 +395,26 @@ async def test_sync_branch_synced(
 
 
 @pytest.mark.asyncio
+async def test_sync_branch_object_present_but_ref_missing(
+    mock_push_event, mock_gh, mock_gl, mock_repligit_ops, caplog
+):
+    """Sync must push when dest has the object but the target ref doesn't point at it.
+
+    Regression: lightweight tags on already-mirrored commits were skipped as
+    "up-to-date" because the check tested object presence, not ref state.
+    """
+    mock_gh.get_prs.return_value = []
+
+    # want_sha exists on the destination, but under a different ref
+    mock_repligit_ops["ls_remote"].return_value = {"refs/heads/other": "sha-123"}
+
+    await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    assert "Synced branch" in caplog.text
+    mock_repligit_ops["send_pack"].assert_awaited_once()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "ref,modified,expected_refresh",
     [
