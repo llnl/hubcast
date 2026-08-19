@@ -285,15 +285,12 @@ async def sync_branch(
         log.info("Skipped branch sync - branch has open PR")
         return
 
-    # only refresh config when a default branch push touches .github/hubcast.yml
     default_branch = event.data["repository"]["default_branch"]
     is_default_branch = sync_ref == f"refs/heads/{default_branch}"
     changed_files = changed_files_from_push(event.data)
     config_changed = gh.repo_config_path in changed_files
     try:
-        repo_config = await get_repo_config(
-            gh, src_fullname, refresh=is_default_branch and config_changed
-        )
+        repo_config = await get_repo_config(gh)
     except RepoConfigError as exc:
         # only report the default branch config's error when this push isn't trying to fix it
         if is_default_branch or not config_changed:
@@ -312,13 +309,10 @@ async def sync_branch(
     head_commit = event.data.get("head_commit")
     commit_msg = head_commit["message"] if head_commit else ""
 
-    # only set/update webhook on default branch pushes when the push actually
-    # touched the config file (config_changed above); this avoids spurious
-    # permission errors when the config merely aged out of the cache
-    # we also give maintainers the option to force-set the webhook: if the
-    # commit message contains [hubcast config], we'll set the webhook
+    # only set/update the webhook on default branch pushes that touch the config
+    # file (avoids spurious permission errors on unrelated pushes); maintainers
+    # can also force it by including [hubcast config] in the commit message
     if is_default_branch and (config_changed or "[hubcast config]" in commit_msg):
-        # setup callback webhook on GitLab
         try:
             await gl.set_webhook(
                 dest_org=repo_config.dest_org,
@@ -385,12 +379,11 @@ async def remove_branch(
     *arg,
     **kwargs,
 ) -> None:
-    src_fullname = event.data["repository"]["full_name"]
     sync_ref = event.data["ref"]
 
     update_log_context(ref=sync_ref)
 
-    repo_config = await get_repo_config(gh, src_fullname)
+    repo_config = await get_repo_config(gh)
 
     dest_fullname = repo_config.dest_fullname
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
@@ -479,7 +472,7 @@ async def sync_pr(
 
     # get the repository configuration from .github/hubcast.yml
     try:
-        repo_config = await get_repo_config(gh, base_fullname)
+        repo_config = await get_repo_config(gh)
     except RepoConfigError as exc:
         # only report the default branch config's error when this push isn't trying to fix it
         if not config_changed:
@@ -596,7 +589,7 @@ async def remove_pr(
     base_fullname = pull_request["base"]["repo"]["full_name"]
 
     # get the repository configuration from .github/hubcast.yml
-    repo_config = await get_repo_config(gh, base_fullname)
+    repo_config = await get_repo_config(gh)
 
     if not repo_config.delete_closed:
         log.info("Skipped PR branch removal - delete_closed disabled")
@@ -711,7 +704,7 @@ async def respond_comment(
         update_log_context(branch=branch)
 
         # get the gitlab repo information and run the pipeline
-        repo_config = await get_repo_config(gh, base_fullname)
+        repo_config = await get_repo_config(gh)
         dest_fullname = repo_config.dest_fullname
 
         try:
@@ -747,7 +740,7 @@ async def respond_comment(
         update_log_context(branch=branch)
 
         # get the gitlab repo information and run the pipeline
-        repo_config = await get_repo_config(gh, base_fullname)
+        repo_config = await get_repo_config(gh)
         dest_fullname = repo_config.dest_fullname
 
         try:
@@ -831,7 +824,6 @@ async def rerun_check(
     Handles a user re-running a check run by retrying the specific GitLab job or pipeline it's attached to.
     See https://docs.github.com/en/webhooks/webhook-events-and-payloads?actionType=rerequested#check_run.
     """
-    src_fullname = event.data["repository"]["full_name"]
     check_run_commit = event.data["check_run"]["head_sha"]
     details_url = event.data["check_run"]["details_url"]
     update_log_context(
@@ -848,7 +840,7 @@ async def rerun_check(
         return
 
     try:
-        repo_config = await get_repo_config(gh, src_fullname)
+        repo_config = await get_repo_config(gh)
     except RepoConfigError as exc:
         await report_config_error(gh, check_run_commit, exc)
         return

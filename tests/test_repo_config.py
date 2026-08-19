@@ -6,11 +6,7 @@ from pydantic import ValidationError
 from hubcast.exceptions import HubcastError, RepoConfigError
 from hubcast.repos.config import RepoConfig
 from hubcast.web.github.messages import CONFIG_INVALID_SUMMARY, CONFIG_INVALID_TITLE
-from hubcast.web.github.utils import (
-    changed_files_from_push,
-    config_cache,
-    get_repo_config,
-)
+from hubcast.web.github.utils import changed_files_from_push, get_repo_config
 
 
 ### FIXTURES
@@ -22,14 +18,6 @@ def mock_github_client():
         return_value="Repo:\n  dest_org: owner\n  dest_name: repo\n"
     )
     return client
-
-
-@pytest.fixture(autouse=True)
-def clear_config_cache():
-    """Clear config cache before each test."""
-    config_cache.clear()
-    yield
-    config_cache.clear()
 
 
 ### TESTS
@@ -120,38 +108,20 @@ def test_validator_with_non_dict():
 
 
 @pytest.mark.asyncio
-async def test_get_repo_config_uses_cache(mock_github_client):
-    """Should use cached config on second call."""
+async def test_get_repo_config(mock_github_client):
+    """Should fetch fresh config on every call."""
 
-    # first call -- fetches from client
-    config1 = await get_repo_config(mock_github_client, "owner/repo")
-
-    # second call -- uses cache
-    config2 = await get_repo_config(mock_github_client, "owner/repo")
-
-    assert config1.dest_org == config2.dest_org
-    mock_github_client.get_repo_config.assert_called_once()  # should only be called once
-
-
-@pytest.mark.asyncio
-async def test_get_repo_config_refreshes(mock_github_client):
-    """Should refresh cache when requested."""
-
-    # first call
-    config1 = await get_repo_config(mock_github_client, "owner/repo")
+    config1 = await get_repo_config(mock_github_client)
+    assert config1.dest_org == "owner"
 
     # update mock to return different data
     mock_github_client.get_repo_config.return_value = (
         "Repo:\n  dest_org: new-org\n  dest_name: new-repo\n"
     )
 
-    # second call with refresh
-    config2 = await get_repo_config(mock_github_client, "owner/repo", refresh=True)
-
-    assert config1.dest_org == "owner"
+    config2 = await get_repo_config(mock_github_client)
     assert config2.dest_org == "new-org"
     assert config2.dest_name == "new-repo"
-    # should be called twice due to refresh
     assert mock_github_client.get_repo_config.call_count == 2
 
 
@@ -171,6 +141,7 @@ async def test_get_repo_config_refreshes(mock_github_client):
         ),
     ],
 )
+
 async def test_get_repo_config_invalid_yaml(raw_config, expected_detail):
     """Test handling of invalid YAML in repo config."""
     gh = AsyncMock()
@@ -181,7 +152,7 @@ async def test_get_repo_config_invalid_yaml(raw_config, expected_detail):
     with pytest.raises(
         RepoConfigError, match="Invalid YAML in repo config"
     ) as exc_info:
-        await get_repo_config(gh, "owner/repo")
+        await get_repo_config(gh)
 
     # route handlers report these to the user via a failed check
     assert exc_info.value.title == CONFIG_INVALID_TITLE
@@ -190,16 +161,13 @@ async def test_get_repo_config_invalid_yaml(raw_config, expected_detail):
 
 
 @pytest.mark.asyncio
-async def test_get_repo_config_missing_repo_key():
+async def test_get_repo_config_missing_repo_key(mock_github_client):
     """Test handling of missing 'Repo' top-level key."""
-    gh = AsyncMock()
     # valid YAML but missing the required 'Repo' key
-    gh.get_repo_config = AsyncMock(return_value="NotRepo:\n  dest_org: owner\n")
-    gh.repo_owner = "owner"
-    gh.repo_name = "repo"
+    mock_github_client.get_repo_config.return_value = "NotRepo:\n  dest_org: owner\n"
 
     with pytest.raises(RepoConfigError, match="Invalid repo config") as exc_info:
-        await get_repo_config(gh, "owner/repo")
+        await get_repo_config(mock_github_client)
 
     assert "top-level 'Repo' section" in exc_info.value.context["error"]
     assert exc_info.value.title == CONFIG_INVALID_TITLE
@@ -209,47 +177,25 @@ async def test_get_repo_config_missing_repo_key():
 
 
 @pytest.mark.asyncio
-async def test_get_repo_config_missing_required_fields():
+async def test_get_repo_config_missing_required_fields(mock_github_client):
     """Test handling of missing required fields within Repo config."""
-    gh = AsyncMock()
     # valid YAML with 'Repo' key but missing required fields
-    gh.get_repo_config = AsyncMock(return_value="Repo:\n  dest_org: owner\n")
-    gh.repo_owner = "owner"
-    gh.repo_name = "repo"
+    mock_github_client.get_repo_config.return_value = "Repo:\n  dest_org: owner\n"
 
     with pytest.raises(RepoConfigError, match="Invalid repo config") as exc_info:
-        await get_repo_config(gh, "owner/repo")
+        await get_repo_config(mock_github_client)
 
     assert "dest_name" in exc_info.value.summary
     assert "Field required" in exc_info.value.summary
 
 
 @pytest.mark.asyncio
-async def test_get_repo_config_not_found_from_github():
+async def test_get_repo_config_not_found_from_github(mock_github_client):
     """Test handling when config file is not found on GitHub."""
-    gh = AsyncMock()
-    gh.get_repo_config = AsyncMock(return_value=None)
+    mock_github_client.get_repo_config.return_value = None
 
     with pytest.raises(HubcastError, match="Repo config file not found"):
-        await get_repo_config(gh, "owner/repo")
-
-
-@pytest.mark.asyncio
-async def test_get_repo_config_not_found_from_cache():
-    """Test handling when cached config is None."""
-    gh = AsyncMock()
-    gh.get_repo_config = AsyncMock(return_value=None)
-
-    # first call caches None
-    with pytest.raises(HubcastError, match="Repo config file not found"):
-        await get_repo_config(gh, "owner/repo")
-
-    # second call should discover cache has None
-    with pytest.raises(HubcastError, match="Repo config file not found"):
-        await get_repo_config(gh, "owner/repo")
-
-    # should only call GH once since second call used cache
-    gh.get_repo_config.assert_called_once()
+        await get_repo_config(mock_github_client)
 
 
 @pytest.mark.parametrize(

@@ -3,7 +3,6 @@ from typing import Any
 
 import yaml
 import yaml.reader
-from cachetools import TTLCache
 from pydantic import ValidationError
 
 from hubcast.clients.github import GitHubClient
@@ -15,9 +14,6 @@ from hubcast.web.github.messages import (
 )
 
 log = logging.getLogger(__name__)
-
-# Shared cache for repository configs with 30-minute TTL
-config_cache: TTLCache[str, RepoConfig | None] = TTLCache(maxsize=1000, ttl=1800)
 
 
 def changed_files_from_push(payload: dict[str, Any]) -> set[str]:
@@ -89,15 +85,15 @@ def parse_repo_config(raw_config: str) -> RepoConfig:
         )
 
 
-async def get_repo_config(
-    gh: GitHubClient, fullname: str, refresh: bool = False
-) -> RepoConfig:
-    """Get repository configuration from cache or fetch from GitHub.
+async def get_repo_config(gh: GitHubClient) -> RepoConfig:
+    """Fetch and validate the repository configuration from GitHub.
+
+    Fetched fresh on every event so all replicas always see the current
+    destination repo; a single contents-API call is well within App
+    installation rate limits.
 
     Args:
         gh: GitHub client instance
-        fullname: Full repository name (e.g., "owner/repo")
-        refresh: Whether to force refresh from GitHub
 
     Returns:
         RepoConfig instance
@@ -106,29 +102,16 @@ async def get_repo_config(
         HubcastError: If config file contains invalid YAML, is missing required keys,
             or has validation errors
     """
-    # check cache first unless refresh is requested
-    if fullname in config_cache and not refresh:
-        config = config_cache[fullname]
-        log.info("Repo config retrieved from cache")
-        if config is None:
-            # raise so route handlers can't continue
-            # we don't want to raise this as a RepoConfigError because telling users
-            # about the absence of the config will create noise and confusion
-            raise HubcastError("Repo config file not found", log_level="INFO")
-        return config
-
-    # cache miss or refresh requested, fetch from GH
     fetched_config = await gh.get_repo_config()
 
     if fetched_config is None:  # 404
-        config_cache[fullname] = None
-        log.info("Cached absence of repo config")
         # raise so route handlers can't continue
+        # we don't want to raise this as a RepoConfigError because telling users
+        # about the absence of the config will create noise and confusion
         raise HubcastError("Repo config file not found", log_level="INFO")
 
     # parse and validate YAML
     config = parse_repo_config(fetched_config)
 
-    config_cache[fullname] = config
     log.info("Repo config fetched from source forge")
     return config

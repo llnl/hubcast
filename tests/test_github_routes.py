@@ -423,38 +423,6 @@ async def test_sync_branch_object_present_but_ref_missing(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "ref,modified,expected_refresh",
-    [
-        ("refs/heads/main", [".github/hubcast.yml"], True),
-        ("refs/heads/main", ["src/app.py"], False),
-        ("refs/heads/feature", [".github/hubcast.yml"], False),
-    ],
-)
-async def test_sync_branch_config_refresh(
-    ref,
-    modified,
-    expected_refresh,
-    mock_push_event,
-    mock_gh,
-    mock_gl,
-    mock_repligit_ops,
-):
-    """Config should only be refreshed when a default branch push touches the config file."""
-
-    mock_push_event.data["ref"] = ref
-    mock_push_event.data["commits"] = [
-        {"added": [], "modified": modified, "removed": []}
-    ]
-
-    await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
-
-    mock_repligit_ops["get_repo_config"].assert_awaited_once_with(
-        mock_gh, "owner/repo", refresh=expected_refresh
-    )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
     "ref,modified,commit_msg,webhook_expected",
     [
         # config file changed on a default branch push
