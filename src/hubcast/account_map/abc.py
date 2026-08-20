@@ -8,7 +8,7 @@ class AccountMap(ABC):
     """
 
     @abstractmethod
-    def __call__(self, source_user: str) -> str | None:
+    async def __call__(self, source_user: str) -> str | None:
         """
         Return the corresponding destination forge user for a given source forge user
         if one exists.

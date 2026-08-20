@@ -45,7 +45,7 @@ class FileMap(AccountMap):
         except (KeyError, TypeError) as e:
             raise FileMapError(f"File map missing Users section. path={path}") from e
 
-    def __call__(self, source_user: str) -> str | None:
+    async def __call__(self, source_user: str) -> str | None:
         """
         Return the destination forge user for a source forge user if one exists.
         """

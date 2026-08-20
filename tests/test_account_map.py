@@ -24,15 +24,25 @@ def ldap_map():
     )
 
 
+@pytest.fixture
+def mock_conn():
+    """Mock LDAP connection returned by a patched ldap.initialize."""
+    with patch("ldap.initialize") as mock_init:
+        conn = Mock()
+        mock_init.return_value = conn
+        yield conn
+
+
 ### TESTS
 
 
 # file mapper tests
-def test_file_map():
+@pytest.mark.asyncio
+async def test_file_map():
     account_map = FileMap("tests/data/file_map.yml")
-    assert account_map("alice") == "alice_123"
-    assert account_map("bob") == "bob_456"
-    assert account_map("charlie") is None
+    assert await account_map("alice") == "alice_123"
+    assert await account_map("bob") == "bob_456"
+    assert await account_map("charlie") is None
 
 
 def test_file_map_no_file():
@@ -62,30 +72,24 @@ def test_file_map_missing_users_key():
 # ldap mapper tests
 
 
-def test_ldap_map_match(ldap_map):
+@pytest.mark.asyncio
+async def test_ldap_map_match(ldap_map, mock_conn):
     """If LDAP returns a matching entry, should return the mapped value."""
 
-    with patch("ldap.initialize") as mock_init:
-        mock_conn = Mock()
-        mock_init.return_value = mock_conn
-        mock_conn.search_s.return_value = [("dn", {"uid": [b"caetano_gitlab"]})]
-        mock_conn.unbind_s.return_value = None
+    mock_conn.search_s.return_value = [("dn", {"uid": [b"caetano_gitlab"]})]
 
-        result = ldap_map("caetano_github")
-        assert result == "caetano_gitlab"
+    result = await ldap_map("caetano_github")
+    assert result == "caetano_gitlab"
 
 
-def test_ldap_map_no_match(ldap_map):
+@pytest.mark.asyncio
+async def test_ldap_map_no_match(ldap_map, mock_conn):
     """If LDAP returns no matching entry, should return None."""
 
-    with patch("ldap.initialize") as mock_init:
-        mock_conn = Mock()
-        mock_init.return_value = mock_conn
-        mock_conn.search_s.return_value = []
-        mock_conn.unbind_s.return_value = None
+    mock_conn.search_s.return_value = []
 
-        result = ldap_map("caetano_github")
-        assert result is None
+    result = await ldap_map("caetano_github")
+    assert result is None
 
 
 @pytest.mark.parametrize(
@@ -95,40 +99,32 @@ def test_ldap_map_no_match(ldap_map):
         {"uid": []},  # uid attribute empty
     ],
 )
-def test_ldap_map_attrib_missing(ldap_map, attrs):
+@pytest.mark.asyncio
+async def test_ldap_map_attrib_missing(ldap_map, mock_conn, attrs):
     """Should return None when attribute is missing or empty."""
 
-    with patch("ldap.initialize") as mock_init:
-        mock_conn = Mock()
-        mock_init.return_value = mock_conn
-        mock_conn.search_s.return_value = [("dn", attrs)]
+    mock_conn.search_s.return_value = [("dn", attrs)]
 
-        result = ldap_map("alice")
-
-        assert result is None
+    result = await ldap_map("alice")
+    assert result is None
 
 
-def test_ldap_map_exception(ldap_map):
+@pytest.mark.asyncio
+async def test_ldap_map_exception(ldap_map, mock_conn):
     """If LDAP raises an exception, should raise HubcastError."""
 
-    with patch("ldap.initialize") as mock_init:
-        mock_conn = Mock()
-        mock_init.return_value = mock_conn
-        mock_conn.search_s.side_effect = ldap.LDAPError("something bad")
-        mock_conn.unbind_s.return_value = None
+    mock_conn.search_s.side_effect = ldap.LDAPError("something bad")
 
-        with pytest.raises(HubcastError, match="LDAP query failed"):
-            ldap_map("caetano_github")
+    with pytest.raises(HubcastError, match="LDAP query failed"):
+        await ldap_map("caetano_github")
 
 
-def test_ldap_map_unbind_failure(ldap_map):
+@pytest.mark.asyncio
+async def test_ldap_map_unbind_failure(ldap_map, mock_conn):
     """Should handle unbind failure gracefully."""
 
-    with patch("ldap.initialize") as mock_init:
-        mock_conn = Mock()
-        mock_init.return_value = mock_conn
-        mock_conn.search_s.return_value = [("dn", {"uid": [b"caetano_gitlab"]})]
-        mock_conn.unbind_s.side_effect = ldap.LDAPError("unbind failed")
+    mock_conn.search_s.return_value = [("dn", {"uid": [b"caetano_gitlab"]})]
+    mock_conn.unbind_s.side_effect = ldap.LDAPError("unbind failed")
 
-        result = ldap_map("caetano_github")
-        assert result == "caetano_gitlab"
+    result = await ldap_map("caetano_github")
+    assert result == "caetano_gitlab"

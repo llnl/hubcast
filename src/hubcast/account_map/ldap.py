@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -13,6 +14,9 @@ log = logging.getLogger(__name__)
 
 # 5 seconds (default is ~30, which is too long)
 ldap.set_option(ldap.OPT_NETWORK_TIMEOUT, 5)
+# bound bind/search operations too; OPT_NETWORK_TIMEOUT only covers connect,
+# without this a hung directory server blocks forever (default is infinite)
+ldap.set_option(ldap.OPT_TIMEOUT, 5)
 
 
 @contextmanager
@@ -73,14 +77,20 @@ class LDAPMap(AccountMap):
         self.bind_dn = bind_dn
         self.bind_password = bind_password
 
-    def __call__(self, source_user: str) -> str | None:
-        # TODO make this a standalone method to make it generic???
+    async def __call__(self, source_user: str) -> str | None:
+        """
+        Async wrapper around the blocking python-ldap lookup; runs it in a
+        thread to keep the event loop free.
+        """
+        return await asyncio.to_thread(self._lookup, source_user)
+
+    def _lookup(self, source_user: str) -> str | None:
         """
         searches the LDAP endpoint for source_user within the search_base and returns
         the value of output_attr.
         Simple bind auth is used if bind_dn is set; otherwise uses SASL/GSSAPI (kerberos).
 
-        Returns None if not found or on error.
+        Returns None if not found; raises HubcastError on LDAP errors.
         """
 
         filterstr = f"({self.input_attr}={source_user})"

@@ -17,7 +17,7 @@ def handler():
     """Handler with mocked dependencies."""
 
     webhook_secret = "secret"
-    account_map = Mock(return_value="gitlab_user")
+    account_map = AsyncMock(return_value="gitlab_user")
     gh_factory = Mock()
     gh_factory.create_client = Mock(return_value=AsyncMock())
     gl_factory = Mock()

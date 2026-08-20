@@ -65,7 +65,7 @@ class GitHubHandler:
             elif (issue := event.data.get("issue")) and "pull_request" in issue:
                 update_log_context(pull_request_id=issue["number"])
 
-            gitlab_user = self.account_map(github_user)
+            gitlab_user = await self.account_map(github_user)
 
             if gitlab_user is None:
                 log.info("Unauthorized GitHub user")
