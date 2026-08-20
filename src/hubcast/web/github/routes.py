@@ -1,5 +1,6 @@
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from aiohttp.client_exceptions import ClientResponseError
@@ -61,6 +62,8 @@ router = GitHubRouter()
 # this check won't linger because resolving issues requires a new commit to be pushed
 ERROR_CHECK_NAME = "hubcast-error"
 
+NULL_SHA = "0" * 40
+
 
 async def report_config_error(gh: GitHubClient, sha: str, exc: RepoConfigError) -> None:
     """Report a missing/invalid repo config to the user as a failed check."""
@@ -72,6 +75,181 @@ async def report_config_error(gh: GitHubClient, sha: str, exc: RepoConfigError) 
         title=exc.title,
         summary=exc.summary,
     )
+
+
+def _pr_branch_name(pull_request: dict[str, Any]) -> str:
+    """Return the branch name used on the destination for this PR.
+
+    Pull requests coming from forks are pushed as branches in the form of
+    pr-<pr-number> instead of as their branch name, as conflicts can occur
+    between multiple source repositories.
+    """
+    src_fullname = pull_request["head"]["repo"]["full_name"]
+    base_fullname = pull_request["base"]["repo"]["full_name"]
+    if src_fullname != base_fullname:
+        return f"pr-{pull_request['number']}"
+    return pull_request["head"]["ref"]
+
+
+def _is_deactivated_account(exc: BadRequest) -> bool:
+    """Whether a GitLab permission-denied error was caused by a deactivated account."""
+    return DEACTIVATED_ACCOUNT_MARKER in str(exc)
+
+
+def _permission_denied_response(exc: BadRequest) -> str:
+    """User-facing message for a GitLab permission-denied error from a comment command."""
+    if _is_deactivated_account(exc):
+        return DEACTIVATED_ACCOUNT_MSG
+    return PERMISSION_DENIED_SUMMARY
+
+
+async def _sync_ref(
+    gh: GitHubClient,
+    gl: GitLabClient,
+    gl_user: str,
+    dest_remote_url: str,
+    sync_ref: str,
+    want_sha: str,
+    src_repo_url: str,
+    # auth rules differ by caller, which needs to provide its own closure
+    get_src_creds: Callable[[], Awaitable[dict[str, str]]],
+    check_name: str,
+    entity: str,
+) -> bool:
+    """Sync `sync_ref` on the destination to `want_sha`, fetching from `src_repo_url`.
+    Permission issues and Repligit errors are reported as GitHub checks to `want_sha`.
+
+    Returns True in a success state (up-to-date or sync performed), otherwise False.
+    """
+    gl_token = await gl.auth.authenticate_user(gl_user)
+
+    try:
+        gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
+    except ClientResponseError as exc:
+        if exc.status not in PERMISSION_DENIED_STATUSES:
+            raise
+        log.info(PERMISSION_DENIED_SYNC_LOG_MSG)
+        await gh.set_check_status(
+            want_sha,
+            check_name,
+            "failure",
+            title=PERMISSION_DENIED_TITLE,
+            summary=PERMISSION_DENIED_SUMMARY,
+        )
+        return False
+
+    have_shas = set(gl_refs.values())
+    from_sha = gl_refs.get(sync_ref) or NULL_SHA
+    update_log_context(from_sha=from_sha, want_sha=want_sha)
+
+    # directly check from_sha equals want_sha for cases where the sha has
+    # already been mirrored but the ref is out-of-date. This is commonly the
+    # case for tags that are created against an existing commit on a branch.
+    if from_sha == want_sha:
+        log.info(f"Skipped {entity} sync - already up-to-date")
+        return True
+
+    # each caller has different rules for fetching the packfile from src_repo_url
+    src_creds = await get_src_creds()
+    packfile = await fetch_pack(src_repo_url, want_sha, have_shas, **src_creds)
+    if packfile is None:
+        raise HubcastError(
+            f"Failed to fetch packfile for {want_sha} from {src_repo_url}"
+        )
+
+    log.info(f"Syncing {entity}")
+    try:
+        await send_pack(
+            dest_remote_url,
+            sync_ref,
+            from_sha,
+            want_sha,
+            packfile,
+            username=gl_user,
+            password=gl_token,
+        )
+    except ClientResponseError as exc:
+        if exc.status not in PERMISSION_DENIED_STATUSES:
+            raise
+        log.info(PERMISSION_DENIED_SYNC_LOG_MSG)
+        await gh.set_check_status(
+            want_sha,
+            check_name,
+            "failure",
+            title=PERMISSION_DENIED_TITLE,
+            summary=PERMISSION_DENIED_SUMMARY,
+        )
+        return False
+    # repligit
+    except RefUpdateRejected as exc:
+        hook_declined = str(exc) == HOOK_DECLINED_MSG
+        await gh.set_check_status(
+            want_sha,
+            check_name,
+            "failure",
+            title=HOOK_DECLINED_TITLE if hook_declined else INTERNAL_ERROR_TITLE,
+            summary=HOOK_DECLINED_SUMMARY if hook_declined else INTERNAL_ERROR_SUMMARY,
+        )
+        if not hook_declined:
+            raise
+        return False
+
+    log.info(f"Synced {entity}")
+    return True
+
+
+async def _delete_ref(
+    gl: GitLabClient,
+    gl_user: str,
+    dest_remote_url: str,
+    sync_ref: str,
+    entity: str,
+) -> None:
+    """Delete `sync_ref` from the destination, if it exists."""
+    gl_token = await gl.auth.authenticate_user(gl_user)
+
+    try:
+        gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
+    except ClientResponseError as exc:
+        if exc.status not in PERMISSION_DENIED_STATUSES:
+            raise
+        # we cannot set GitHub status checks for deleted refs, and we have no way to notify the user of this failure
+        log.info(PERMISSION_DENIED_DELETE_LOG_MSG)
+        return
+
+    head_sha = gl_refs.get(sync_ref)
+    update_log_context(head_sha=head_sha)
+
+    if head_sha is None:
+        log.info(f"Skipped {entity} removal - ref not found")
+        return
+
+    log.info(f"Deleting {entity}")
+
+    try:
+        await send_pack(
+            dest_remote_url,
+            sync_ref,
+            head_sha,
+            NULL_SHA,
+            b"",
+            username=gl_user,
+            password=gl_token,
+        )
+    except ClientResponseError as exc:
+        if exc.status not in PERMISSION_DENIED_STATUSES:
+            raise
+        log.info(PERMISSION_DENIED_DELETE_LOG_MSG)
+        return
+    # repligit
+    except RefUpdateRejected as exc:
+        if str(exc) != HOOK_DECLINED_MSG:
+            # raise unknown ref update rejected errors for later debugging
+            raise
+        log.info(str(exc))
+        return
+
+    log.info(f"Deleted {entity}")
 
 
 # -----------------------------------
@@ -159,89 +337,27 @@ async def sync_branch(
         else:
             log.info("Updated GitLab webhook", extra={"dest_fullname": dest_fullname})
 
-    # sync commits from GitHub -> GitLab
-    gl_token = await gl.auth.authenticate_user(gl_user)
+    async def get_src_creds() -> dict[str, str]:
+        # push events can only come via the source repo, so we assume that the GitHub app can authenticate with its credentials
+        return {
+            "username": gh.requester,  # the username doesn't matter, but can't be empty
+            "password": await gh.auth.authenticate_installation(
+                gh.repo_owner, gh.repo_name
+            ),
+        }
 
-    try:
-        gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
-    except ClientResponseError as exc:
-        if exc.status not in PERMISSION_DENIED_STATUSES:
-            raise
-        log.info(PERMISSION_DENIED_SYNC_LOG_MSG)
-        await gh.set_check_status(
-            want_sha,
-            repo_config.check_name,
-            "failure",
-            title=PERMISSION_DENIED_TITLE,
-            summary=PERMISSION_DENIED_SUMMARY,
-        )
-        return
-
-    have_shas = set(gl_refs.values())
-    from_sha = gl_refs.get(sync_ref) or ("0" * 40)
-
-    update_log_context(from_sha=from_sha, want_sha=want_sha)
-
-    # directly check from_sha equals want_sha for cases where the sha has
-    # already been mirrored but the ref is out-of-date. This is commonly the
-    # case for tags that are created against an existing commit on a branch.
-    if from_sha == want_sha:
-        log.info("Skipped branch sync - already up-to-date")
-        return
-
-    log.info("Syncing branch")
-
-    gh_token = await gh.auth.authenticate_installation(gh.repo_owner, gh.repo_name)
-
-    packfile = await fetch_pack(
-        src_repo_url,
+    await _sync_ref(
+        gh,
+        gl,
+        gl_user,
+        dest_remote_url,
+        sync_ref,
         want_sha,
-        have_shas,
-        username=gh.requester,  # the username doesn't matter, but can't be empty
-        password=gh_token,
+        src_repo_url,
+        get_src_creds,
+        check_name=repo_config.check_name,
+        entity="branch",
     )
-    if packfile is None:
-        raise HubcastError(
-            f"Failed to fetch packfile for {want_sha} from {src_repo_url}"
-        )
-
-    try:
-        await send_pack(
-            dest_remote_url,
-            sync_ref,
-            from_sha,
-            want_sha,
-            packfile,
-            username=gl_user,
-            password=gl_token,
-        )
-    except ClientResponseError as exc:
-        if exc.status not in PERMISSION_DENIED_STATUSES:
-            raise
-        log.info(PERMISSION_DENIED_SYNC_LOG_MSG)
-        await gh.set_check_status(
-            want_sha,
-            repo_config.check_name,
-            "failure",
-            title=PERMISSION_DENIED_TITLE,
-            summary=PERMISSION_DENIED_SUMMARY,
-        )
-        return
-    # repligit
-    except RefUpdateRejected as exc:
-        hook_declined = str(exc) == HOOK_DECLINED_MSG
-        await gh.set_check_status(
-            want_sha,
-            repo_config.check_name,
-            "failure",
-            title=HOOK_DECLINED_TITLE if hook_declined else INTERNAL_ERROR_TITLE,
-            summary=HOOK_DECLINED_SUMMARY if hook_declined else INTERNAL_ERROR_SUMMARY,
-        )
-        if not hook_declined:
-            raise
-        return
-
-    log.info("Synced branch")
 
 
 @router.register("push", deleted=True)
@@ -256,58 +372,14 @@ async def remove_branch(
     src_fullname = event.data["repository"]["full_name"]
     sync_ref = event.data["ref"]
 
+    update_log_context(ref=sync_ref)
+
     repo_config = await get_repo_config(gh, src_fullname)
 
     dest_fullname = repo_config.dest_fullname
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
 
-    gl_token = await gl.auth.authenticate_user(gl_user)
-
-    try:
-        gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
-    except ClientResponseError as exc:
-        if exc.status not in PERMISSION_DENIED_STATUSES:
-            raise
-        # we cannot set GitHub status checks for deleted refs, and we have no way to notify the user of this failure
-        log.info(PERMISSION_DENIED_DELETE_LOG_MSG)
-        return
-
-    head_sha = gl_refs.get(sync_ref)
-
-    update_log_context(ref=sync_ref, head_sha=head_sha)
-
-    if head_sha is None:
-        log.info("Skipped branch removal - ref not found")
-        return
-
-    null_sha = "0" * 40
-
-    log.info("Deleting branch")
-
-    try:
-        await send_pack(
-            dest_remote_url,
-            sync_ref,
-            head_sha,
-            null_sha,
-            b"",
-            username=gl_user,
-            password=gl_token,
-        )
-    except ClientResponseError as exc:
-        if exc.status not in PERMISSION_DENIED_STATUSES:
-            raise
-        log.info(PERMISSION_DENIED_DELETE_LOG_MSG)
-        return
-    # repligit
-    except RefUpdateRejected as exc:
-        if str(exc) != HOOK_DECLINED_MSG:
-            # raise unknown ref update rejected errors for later debugging
-            raise
-        log.info(str(exc))
-        return
-
-    log.info("Deleted branch")
+    await _delete_ref(gl, gl_user, dest_remote_url, sync_ref, entity="branch")
 
 
 # -----------------------------------
@@ -328,21 +400,12 @@ async def sync_pr(
 
     This isn't technically an event handler, but is used a couple different ways in this file.
     """
-    pull_request_id = pull_request["number"]
-
     src_repo_url = pull_request["head"]["repo"]["clone_url"]
     src_fullname = pull_request["head"]["repo"]["full_name"]
     base_fullname = pull_request["base"]["repo"]["full_name"]
-
-    # pull requests coming from forks are pushed as branches in the form of
-    # pr-<pr-number> instead of as their branch name as conflicts could occur
-    # between multiple repositories
     is_pull_request_fork = src_fullname != base_fullname
-    if is_pull_request_fork:
-        sync_branch = f"pr-{pull_request_id}"
-    else:
-        sync_branch = pull_request["head"]["ref"]
 
+    sync_branch = _pr_branch_name(pull_request)
     sync_ref = f"refs/heads/{sync_branch}"
 
     update_log_context(ref=sync_ref)
@@ -375,99 +438,38 @@ async def sync_pr(
 
     dest_fullname = repo_config.dest_fullname
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
-    gl_token = await gl.auth.authenticate_user(gl_user)
 
-    try:
-        gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
-    except ClientResponseError as exc:
-        if exc.status not in PERMISSION_DENIED_STATUSES:
-            raise
-        log.info(PERMISSION_DENIED_SYNC_LOG_MSG)
-        await gh.set_check_status(
-            want_sha,
-            repo_config.check_name,
-            "failure",
-            title=PERMISSION_DENIED_TITLE,
-            summary=PERMISSION_DENIED_SUMMARY,
-        )
+    async def get_src_creds() -> dict[str, str]:
+        # we should not try to authenticate if the source is a public fork, as our GitHub app credentials will not work
+        # in addition to the fact that they are public
+        if is_pull_request_fork and not src_repo_private:
+            return {}
+        # use GH app credentials if the PR comes from the src repo
+        return {
+            "username": gh.requester,  # the username doesn't matter, but can't be empty
+            "password": await gh.auth.authenticate_installation(
+                gh.repo_owner, gh.repo_name
+            ),
+        }
+
+    synced = await _sync_ref(
+        gh,
+        gl,
+        gl_user,
+        dest_remote_url,
+        sync_ref,
+        want_sha,
+        src_repo_url,
+        get_src_creds,
+        check_name=repo_config.check_name,
+        entity="PR",
+    )
+
+    # sync failed (logged in _sync_ref)
+    if not synced:
         return
 
-    have_shas = set(gl_refs.values())
-    from_sha = gl_refs.get(sync_ref) or ("0" * 40)
-    update_log_context(from_sha=from_sha, want_sha=want_sha)
-
-    # directly check from_sha equals want_sha for cases where the sha has
-    # already been mirrored but the ref is out-of-date. This is commonly the
-    # case for tags that are created against an existing commit on a branch.
-    if from_sha == want_sha:
-        log.info("Skipped PR sync - already up-to-date")
-    else:  # needs sync
-        if is_pull_request_fork and not src_repo_private:
-            # no auth needed for public forks
-            src_creds = {}
-        else:
-            # authenticate if the PR comes from the src repository
-            src_creds = {
-                "username": gh.requester,  # the username doesn't matter, but can't be empty
-                "password": await gh.auth.authenticate_installation(
-                    gh.repo_owner, gh.repo_name
-                ),
-            }
-
-        # fetch differential packfile with all new commits
-        packfile = await fetch_pack(
-            src_repo_url,
-            want_sha,
-            have_shas,
-            **src_creds,
-        )
-        if packfile is None:
-            raise HubcastError(
-                f"Failed to fetch packfile for {want_sha} from {src_repo_url}"
-            )
-
-        # upload packfile to gitlab repository
-        log.info("Syncing PR")
-        try:
-            await send_pack(
-                dest_remote_url,
-                sync_ref,
-                from_sha,
-                want_sha,
-                packfile,
-                username=gl_user,
-                password=gl_token,
-            )
-        except ClientResponseError as exc:
-            if exc.status not in PERMISSION_DENIED_STATUSES:
-                raise
-            log.info(PERMISSION_DENIED_SYNC_LOG_MSG)
-            await gh.set_check_status(
-                want_sha,
-                repo_config.check_name,
-                "failure",
-                title=PERMISSION_DENIED_TITLE,
-                summary=PERMISSION_DENIED_SUMMARY,
-            )
-            return
-        # repligit
-        except RefUpdateRejected as exc:
-            hook_declined = str(exc) == HOOK_DECLINED_MSG
-            await gh.set_check_status(
-                want_sha,
-                repo_config.check_name,
-                "failure",
-                title=HOOK_DECLINED_TITLE if hook_declined else INTERNAL_ERROR_TITLE,
-                summary=HOOK_DECLINED_SUMMARY
-                if hook_declined
-                else INTERNAL_ERROR_SUMMARY,
-            )
-            if not hook_declined:
-                raise
-            return
-
-        log.info("Synced PR")
-
+    # create MRs if configured
     # skip already created MRs
     if repo_config.create_mr and not await gl.get_mr(
         dest_fullname, sync_branch, default_branch
@@ -525,7 +527,6 @@ async def remove_pr(
     **kwargs,
 ) -> None:
     pull_request = event.data["pull_request"]
-    pull_request_id = pull_request["number"]
     src_fullname = pull_request["head"]["repo"]["full_name"]
     base_fullname = pull_request["base"]["repo"]["full_name"]
 
@@ -545,54 +546,14 @@ async def remove_pr(
     if not is_pull_request_fork:
         log.info("Skipped PR branch removal - internal branch")
         return
-    sync_ref = f"refs/heads/pr-{pull_request_id}"
 
+    sync_ref = f"refs/heads/{_pr_branch_name(pull_request)}"
     update_log_context(ref=sync_ref)
 
     dest_fullname = repo_config.dest_fullname
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
-    gl_token = await gl.auth.authenticate_user(gl_user)
 
-    try:
-        gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
-    except ClientResponseError as exc:
-        if exc.status not in PERMISSION_DENIED_STATUSES:
-            raise
-        # we cannot set GitHub status checks for deleted refs, and we have no way to notify the user of this failure
-        log.info(PERMISSION_DENIED_DELETE_LOG_MSG)
-        return
-
-    head_sha = gl_refs.get(sync_ref)
-    if head_sha is None:
-        log.info("Skipped PR branch removal - ref not found")
-        return
-
-    null_sha = "0" * 40
-
-    log.info("Deleting PR branch")
-    try:
-        await send_pack(
-            dest_remote_url,
-            sync_ref,
-            head_sha,
-            null_sha,
-            b"",
-            username=gl_user,
-            password=gl_token,
-        )
-    except ClientResponseError as exc:
-        if exc.status not in PERMISSION_DENIED_STATUSES:
-            raise
-        log.info(PERMISSION_DENIED_DELETE_LOG_MSG)
-        return
-    # repligit
-    except RefUpdateRejected as exc:
-        if str(exc) != HOOK_DECLINED_MSG:
-            raise
-        log.info(str(exc))
-        return
-
-    log.info("Deleted PR branch")
+    await _delete_ref(gl, gl_user, dest_remote_url, sync_ref, entity="PR branch")
 
 
 @router.register("issue_comment", action="created")
@@ -679,17 +640,8 @@ async def respond_comment(
         pull_request = await gh.get_pr(pr_number)
 
         # get the branch this PR belongs to
-        src_fullname = pull_request["head"]["repo"]["full_name"]
         base_fullname = pull_request["base"]["repo"]["full_name"]
-
-        # pull requests coming from forks are pushed as branches in the form of
-        # pr-<pr-number> instead of as their branch name as conflicts could occur
-        # between multiple repositories
-        is_pull_request_fork = src_fullname != base_fullname
-        if is_pull_request_fork:
-            branch = f"pr-{pr_number}"
-        else:
-            branch = pull_request["head"]["ref"]
+        branch = _pr_branch_name(pull_request)
 
         update_log_context(branch=branch)
 
@@ -701,11 +653,7 @@ async def respond_comment(
             pipeline_url = await gl.run_pipeline(dest_fullname, branch)
         except BadRequest as exc:
             if exc.status_code in PERMISSION_DENIED_STATUSES:
-                response = (
-                    DEACTIVATED_ACCOUNT_MSG
-                    if DEACTIVATED_ACCOUNT_MARKER in str(exc)
-                    else PERMISSION_DENIED_SUMMARY
-                )
+                response = _permission_denied_response(exc)
                 log.info("Pipeline failed to start - insufficient permissions")
             elif exc.status_code == 400:
                 # \n to avoid indent markdown issues
@@ -728,16 +676,8 @@ async def respond_comment(
         pull_request = await gh.get_pr(pr_number)
 
         # get the branch this PR belongs to
-        src_fullname = pull_request["head"]["repo"]["full_name"]
         base_fullname = pull_request["base"]["repo"]["full_name"]
-        # pull requests coming from forks are pushed as branches in the form of
-        # pr-<pr-number> instead of as their branch name as conflicts could occur
-        # between multiple repositories
-        is_pull_request_fork = src_fullname != base_fullname
-        if is_pull_request_fork:
-            branch = f"pr-{pr_number}"
-        else:
-            branch = pull_request["head"]["ref"]
+        branch = _pr_branch_name(pull_request)
 
         update_log_context(branch=branch)
 
@@ -750,11 +690,7 @@ async def respond_comment(
         except BadRequest as exc:
             if exc.status_code not in PERMISSION_DENIED_STATUSES:
                 raise
-            response = (
-                DEACTIVATED_ACCOUNT_MSG
-                if DEACTIVATED_ACCOUNT_MARKER in str(exc)
-                else PERMISSION_DENIED_SUMMARY
-            )
+            response = _permission_denied_response(exc)
             log.info("Pipeline ID fetch failed - insufficient permissions")
         else:
             if pipeline_id:
@@ -765,11 +701,7 @@ async def respond_comment(
                 except BadRequest as exc:
                     if exc.status_code not in PERMISSION_DENIED_STATUSES:
                         raise
-                    response = (
-                        DEACTIVATED_ACCOUNT_MSG
-                        if DEACTIVATED_ACCOUNT_MARKER in str(exc)
-                        else PERMISSION_DENIED_SUMMARY
-                    )
+                    response = _permission_denied_response(exc)
                     log.info("Jobs restart failed - insufficient permissions")
                 else:
                     response = f"I've retried any failed jobs in the [pipeline]({pipeline_url})!"
@@ -803,7 +735,7 @@ async def _fail_check_from_pipeline_error(
 ) -> None:
     """Set a failing check status from a GitLab pipeline/job start error."""
     if exc.status_code in PERMISSION_DENIED_STATUSES:
-        deactivated = DEACTIVATED_ACCOUNT_MARKER in str(exc)
+        deactivated = _is_deactivated_account(exc)
         message = DEACTIVATED_ACCOUNT_MSG if deactivated else PERMISSION_DENIED_TITLE
         summary = "" if deactivated else PERMISSION_DENIED_SUMMARY
     elif exc.status_code == 400:
