@@ -77,7 +77,7 @@ async def report_config_error(gh: GitHubClient, sha: str, exc: RepoConfigError) 
     )
 
 
-def _pr_sync_branch(pull_request: dict[str, Any]) -> str:
+def _pr_branch_name(pull_request: dict[str, Any]) -> str:
     """Return the branch name used on the destination for this PR.
 
     Pull requests coming from forks are pushed as branches in the form of
@@ -89,6 +89,18 @@ def _pr_sync_branch(pull_request: dict[str, Any]) -> str:
     if src_fullname != base_fullname:
         return f"pr-{pull_request['number']}"
     return pull_request["head"]["ref"]
+
+
+def _is_deactivated_account(exc: BadRequest) -> bool:
+    """Whether a GitLab permission-denied error was caused by a deactivated account."""
+    return DEACTIVATED_ACCOUNT_MARKER in str(exc)
+
+
+def _permission_denied_response(exc: BadRequest) -> str:
+    """User-facing message for a GitLab permission-denied error from a comment command."""
+    if _is_deactivated_account(exc):
+        return DEACTIVATED_ACCOUNT_MSG
+    return PERMISSION_DENIED_SUMMARY
 
 
 async def _sync_ref(
@@ -393,7 +405,7 @@ async def sync_pr(
     base_fullname = pull_request["base"]["repo"]["full_name"]
     is_pull_request_fork = src_fullname != base_fullname
 
-    sync_branch = _pr_sync_branch(pull_request)
+    sync_branch = _pr_branch_name(pull_request)
     sync_ref = f"refs/heads/{sync_branch}"
 
     update_log_context(ref=sync_ref)
@@ -530,11 +542,11 @@ async def remove_pr(
     # pull request comes from an internal branch we should wait
     # to clean up the branch when the branch is deleted from the
     # internal repository
-    if src_fullname == base_fullname:
+    if not src_fullname != base_fullname:
         log.info("Skipped PR branch removal - internal branch")
         return
 
-    sync_ref = f"refs/heads/{_pr_sync_branch(pull_request)}"
+    sync_ref = f"refs/heads/{_pr_branch_name(pull_request)}"
     update_log_context(ref=sync_ref)
 
     dest_fullname = repo_config.dest_fullname
@@ -628,7 +640,7 @@ async def respond_comment(
 
         # get the branch this PR belongs to
         base_fullname = pull_request["base"]["repo"]["full_name"]
-        branch = _pr_sync_branch(pull_request)
+        branch = _pr_branch_name(pull_request)
 
         update_log_context(branch=branch)
 
@@ -664,7 +676,7 @@ async def respond_comment(
 
         # get the branch this PR belongs to
         base_fullname = pull_request["base"]["repo"]["full_name"]
-        branch = _pr_sync_branch(pull_request)
+        branch = _pr_branch_name(pull_request)
 
         update_log_context(branch=branch)
 
@@ -712,18 +724,6 @@ async def respond_comment(
 # at the corresponding GitLab job/pipeline (see job_status_relay and pipeline_status_relay in web/gitlab/routes.py)
 JOB_DETAILS_URL_RE = re.compile(r"/-/jobs/(\d+)/?$")
 PIPELINE_DETAILS_URL_RE = re.compile(r"/-/pipelines/(\d+)/?$")
-
-
-def _is_deactivated_account(exc: BadRequest) -> bool:
-    """Whether a GitLab permission-denied error was caused by a deactivated account."""
-    return DEACTIVATED_ACCOUNT_MARKER in str(exc)
-
-
-def _permission_denied_response(exc: BadRequest) -> str:
-    """User-facing message for a GitLab permission-denied error from a comment command."""
-    if _is_deactivated_account(exc):
-        return DEACTIVATED_ACCOUNT_MSG
-    return PERMISSION_DENIED_SUMMARY
 
 
 async def _fail_check_from_pipeline_error(
