@@ -542,7 +542,8 @@ async def remove_pr(
     # pull request comes from an internal branch we should wait
     # to clean up the branch when the branch is deleted from the
     # internal repository
-    if not src_fullname != base_fullname:
+    is_pull_request_fork = src_fullname != base_fullname
+    if not is_pull_request_fork:
         log.info("Skipped PR branch removal - internal branch")
         return
 
