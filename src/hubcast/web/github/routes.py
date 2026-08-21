@@ -698,9 +698,7 @@ async def respond_comment(
         pull_request = await gh.get_pr(pr_number)
 
         # get the branch this PR belongs to
-        base_fullname = pull_request["base"]["repo"]["full_name"]
         branch = _pr_branch_name(pull_request)
-
         update_log_context(branch=branch)
 
         # get the gitlab repo information and run the pipeline
@@ -734,9 +732,7 @@ async def respond_comment(
         pull_request = await gh.get_pr(pr_number)
 
         # get the branch this PR belongs to
-        base_fullname = pull_request["base"]["repo"]["full_name"]
         branch = _pr_branch_name(pull_request)
-
         update_log_context(branch=branch)
 
         # get the gitlab repo information and run the pipeline
