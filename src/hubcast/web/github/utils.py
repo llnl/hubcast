@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 import yaml
+import yaml.reader
 from cachetools import TTLCache
 from pydantic import ValidationError
 
