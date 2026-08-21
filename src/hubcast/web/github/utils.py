@@ -36,9 +36,10 @@ def _format_yaml_error(exc: yaml.YAMLError) -> str:
         # encoding/control-character issues
         return f"- {exc.reason} (position {exc.position})"
 
-    assert isinstance(
-        exc, yaml.MarkedYAMLError
-    )  # the only other error safe_load raises (needed to resolve type issues)
+    if not isinstance(exc, yaml.MarkedYAMLError):
+        # the only other error safe_load raises (needed to resolve type issues)
+        raise TypeError(f"Unexpected YAML error type: {type(exc)!r}")
+
     problem = f"{exc.context}; {exc.problem}" if exc.context else exc.problem
     mark = exc.problem_mark
     line = (
