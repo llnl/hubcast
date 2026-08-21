@@ -45,6 +45,11 @@ CONFIG_INVALID_SUMMARY = (
     "Hubcast could not parse `hubcast.yml`. "
     f"Fix the configuration file and retry. See the [user guide]({CONFIG_DOCS_URL}) for details."
 )
+CONFIG_VALID_TITLE = "Hubcast config file is valid"
+CONFIG_VALID_SUMMARY = (
+    "Hubcast has validated `hubcast.yml`. "
+    "These changes will take effect once merged into the default branch."
+)
 
 
 def help_message(bot_caller: str) -> str:

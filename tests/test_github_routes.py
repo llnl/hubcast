@@ -13,6 +13,10 @@ from repligit.exceptions import RefUpdateRejected
 
 from hubcast.exceptions import HubcastError, RepoConfigError, WebhookPermissionError
 from hubcast.web.github.messages import (
+    CONFIG_INVALID_SUMMARY,
+    CONFIG_INVALID_TITLE,
+    CONFIG_VALID_SUMMARY,
+    CONFIG_VALID_TITLE,
     DEACTIVATED_ACCOUNT_MARKER,
     DEACTIVATED_ACCOUNT_MSG,
     HOOK_DECLINED_MSG,
@@ -37,6 +41,7 @@ from hubcast.web.github.routes import (
     router,
     sync_branch,
     sync_pr_event,
+    validate_config_change,
 )
 
 
@@ -209,6 +214,8 @@ def mock_gh():
     gh.react_to_comment = AsyncMock()
     gh.auth.authenticate_installation = AsyncMock(return_value="gh-token-123")
     gh.repo_config_path = ".github/hubcast.yml"
+    gh.get_pr_files = AsyncMock(return_value=[])
+    gh.get_repo_config = AsyncMock(return_value=None)
     return gh
 
 
@@ -780,7 +787,7 @@ sync_cases = pytest.mark.parametrize(
 async def test_sync_config_error_sets_error_check(
     case, request, mock_gh, mock_gl, mock_repligit_ops
 ):
-    """An invalid repo config should be reported as a failed hubcast-error check."""
+    """An invalid repo config should be reported as a failed hubcast-config check."""
 
     event = request.getfixturevalue(case.event_fixture)
     mock_repligit_ops["get_repo_config"].side_effect = repo_config_error()
@@ -795,6 +802,8 @@ async def test_sync_config_error_sets_error_check(
         summary="config summary",
     )
     mock_repligit_ops["send_pack"].assert_not_called()
+    # neither caller should fetch the change's own file when there's nothing new to validate
+    mock_gh.get_repo_config.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -920,6 +929,182 @@ async def test_sync_other_error_raises(
     with pytest.raises(type(error)):
         await case.handler(event=event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
     mock_gh.set_check_status.assert_not_called()
+
+
+# Tests for validate_config_change
+
+VALID_CONFIG_YAML = "Repo:\n  dest_org: owner\n  dest_name: repo\n"
+INVALID_CONFIG_YAML = "Repo:\n  dest_org: owner\n"  # missing required dest_name
+
+
+@pytest.mark.asyncio
+async def test_validate_config_change_skips_when_config_not_changed(mock_gh):
+    """Should not fetch or validate config when changed_files doesn't include hubcast.yml."""
+
+    await validate_config_change(mock_gh, ["src/app.py"], "pr-sha-123")
+
+    mock_gh.get_repo_config.assert_not_called()
+    mock_gh.set_check_status.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_change_skips_when_config_deleted(mock_gh):
+    """Should not report a check when hubcast.yml was deleted in this change."""
+
+    mock_gh.get_repo_config.return_value = None
+
+    await validate_config_change(mock_gh, [".github/hubcast.yml"], "pr-sha-123")
+
+    mock_gh.get_repo_config.assert_awaited_once_with(ref="pr-sha-123")
+    mock_gh.set_check_status.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_change_valid(mock_gh):
+    """Should report a success check, on ERROR_CHECK_NAME, when the proposed hubcast.yml is valid."""
+
+    mock_gh.get_repo_config.return_value = VALID_CONFIG_YAML
+
+    await validate_config_change(mock_gh, [".github/hubcast.yml"], "pr-sha-123")
+
+    mock_gh.set_check_status.assert_awaited_once_with(
+        "pr-sha-123",
+        ERROR_CHECK_NAME,
+        "success",
+        title=CONFIG_VALID_TITLE,
+        summary=CONFIG_VALID_SUMMARY,
+    )
+
+
+@pytest.mark.asyncio
+async def test_validate_config_change_invalid(mock_gh):
+    """Should report a failure check, on ERROR_CHECK_NAME, when the proposed hubcast.yml fails validation."""
+
+    mock_gh.get_repo_config.return_value = INVALID_CONFIG_YAML
+
+    await validate_config_change(mock_gh, [".github/hubcast.yml"], "pr-sha-123")
+
+    mock_gh.set_check_status.assert_awaited_once()
+    args, kwargs = mock_gh.set_check_status.await_args
+    assert args[:3] == ("pr-sha-123", ERROR_CHECK_NAME, "failure")
+    assert kwargs["title"] == CONFIG_INVALID_TITLE
+    assert kwargs["summary"].startswith(CONFIG_INVALID_SUMMARY)
+    # the specific missing field should be shown
+    assert "dest_name" in kwargs["summary"]
+
+
+@pytest.mark.asyncio
+async def test_sync_pr_config_fix_skips_base_error_report(
+    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops
+):
+    """When the base branch's config is broken but this PR's own edit to
+    hubcast.yml fixes it, only the fix's success should be reported.
+    """
+
+    mock_repligit_ops["get_repo_config"].side_effect = repo_config_error()
+    mock_gh.get_pr_files.return_value = [".github/hubcast.yml"]
+    mock_gh.get_repo_config.return_value = VALID_CONFIG_YAML
+
+    await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    mock_gh.set_check_status.assert_awaited_once_with(
+        "pr-sha-123",
+        ERROR_CHECK_NAME,
+        "success",
+        title=CONFIG_VALID_TITLE,
+        summary=CONFIG_VALID_SUMMARY,
+    )
+
+
+@pytest.mark.asyncio
+async def test_sync_pr_config_break_fails_even_when_base_config_is_fine(
+    mock_pr_event, mock_gh, mock_gl, mock_repligit_ops
+):
+    """A PR that breaks hubcast.yml should fail validation even though the base branch's config is fine."""
+
+    mock_gh.get_pr_files.return_value = [".github/hubcast.yml"]
+    mock_gh.get_repo_config.return_value = INVALID_CONFIG_YAML
+
+    await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    failure_calls = [
+        call
+        for call in mock_gh.set_check_status.await_args_list
+        if call.args[:3] == ("pr-sha-123", ERROR_CHECK_NAME, "failure")
+    ]
+    assert len(failure_calls) == 1
+    assert failure_calls[0].kwargs["title"] == CONFIG_INVALID_TITLE
+    assert failure_calls[0].kwargs["summary"].startswith(CONFIG_INVALID_SUMMARY)
+    assert "dest_name" in failure_calls[0].kwargs["summary"]
+
+
+@pytest.mark.asyncio
+async def test_sync_branch_non_default_validates_own_config_on_change(
+    mock_push_event, mock_gh, mock_gl, mock_repligit_ops
+):
+    """Provide feedback to config changes made to non-default branches."""
+
+    mock_push_event.data["ref"] = "refs/heads/feature-x"
+    mock_push_event.data["commits"] = [
+        {"added": [], "modified": [".github/hubcast.yml"], "removed": []}
+    ]
+    mock_gh.get_repo_config.return_value = VALID_CONFIG_YAML
+
+    await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    mock_gh.get_repo_config.assert_awaited_once_with(ref="sha-123")
+    mock_gh.set_check_status.assert_any_await(
+        "sha-123",
+        ERROR_CHECK_NAME,
+        "success",
+        title=CONFIG_VALID_TITLE,
+        summary=CONFIG_VALID_SUMMARY,
+    )
+
+
+@pytest.mark.asyncio
+async def test_sync_branch_non_default_config_fix_skips_base_error_report(
+    mock_push_event, mock_gh, mock_gl, mock_repligit_ops
+):
+    """A non-default branch push that fixes hubcast.yml should only report success, not the default branch config error."""
+
+    mock_push_event.data["ref"] = "refs/heads/feature-x"
+    mock_push_event.data["commits"] = [
+        {"added": [], "modified": [".github/hubcast.yml"], "removed": []}
+    ]
+    mock_repligit_ops["get_repo_config"].side_effect = repo_config_error()
+    mock_gh.get_repo_config.return_value = VALID_CONFIG_YAML
+
+    await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    mock_gh.set_check_status.assert_awaited_once_with(
+        "sha-123",
+        ERROR_CHECK_NAME,
+        "success",
+        title=CONFIG_VALID_TITLE,
+        summary=CONFIG_VALID_SUMMARY,
+    )
+
+
+@pytest.mark.asyncio
+async def test_sync_branch_non_default_config_unrelated_still_reports_base_error(
+    mock_push_event, mock_gh, mock_gl, mock_repligit_ops
+):
+    """A non-default branch push that doesn't touch hubcast.yml should still report the default branches config error."""
+
+    mock_push_event.data["ref"] = "refs/heads/feature-x"
+    mock_repligit_ops["get_repo_config"].side_effect = repo_config_error()
+
+    await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
+
+    mock_gh.set_check_status.assert_awaited_once_with(
+        "sha-123",
+        ERROR_CHECK_NAME,
+        "failure",
+        title="config title",
+        summary="config summary",
+    )
+    mock_gh.get_repo_config.assert_not_called()
 
 
 # Tests for remove_pr
@@ -1535,7 +1720,7 @@ async def test_rerun_check_unrecognized_check_skipped(
 async def test_rerun_check_config_error_sets_error_check(
     mock_check_run_event, mock_gh, mock_gl, mock_repligit_ops
 ):
-    """An invalid repo config should be reported as a failed hubcast-error check."""
+    """An invalid repo config should be reported as a failed hubcast-config check."""
 
     mock_repligit_ops["get_repo_config"].side_effect = repo_config_error()
 

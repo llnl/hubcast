@@ -1,6 +1,6 @@
 import logging
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from typing import Any
 
 from aiohttp.client_exceptions import ClientResponseError
@@ -14,6 +14,8 @@ from hubcast.clients.gitlab.client import GitLabClient
 from hubcast.exceptions import HubcastError, RepoConfigError, WebhookPermissionError
 from hubcast.logging import update_log_context
 from hubcast.web.github.messages import (
+    CONFIG_VALID_SUMMARY,
+    CONFIG_VALID_TITLE,
     DEACTIVATED_ACCOUNT_MARKER,
     DEACTIVATED_ACCOUNT_MSG,
     HOOK_DECLINED_MSG,
@@ -31,7 +33,11 @@ from hubcast.web.github.messages import (
     WEBHOOK_PERMISSION_DENIED_TITLE,
     help_message,
 )
-from hubcast.web.github.utils import changed_files_from_push, get_repo_config
+from hubcast.web.github.utils import (
+    changed_files_from_push,
+    get_repo_config,
+    parse_repo_config,
+)
 
 log = logging.getLogger(__name__)
 
@@ -60,7 +66,7 @@ router = GitHubRouter()
 # this avoids overwriting errors if a normal pipeline succeeds, and provides
 # a default for situations where there is no default check name set
 # this check won't linger because resolving issues requires a new commit to be pushed
-ERROR_CHECK_NAME = "hubcast-error"
+ERROR_CHECK_NAME = "hubcast-config"
 
 NULL_SHA = "0" * 40
 
@@ -282,14 +288,24 @@ async def sync_branch(
     # only refresh config when a default branch push touches .github/hubcast.yml
     default_branch = event.data["repository"]["default_branch"]
     is_default_branch = sync_ref == f"refs/heads/{default_branch}"
-    config_changed = gh.repo_config_path in changed_files_from_push(event.data)
+    changed_files = changed_files_from_push(event.data)
+    config_changed = gh.repo_config_path in changed_files
     try:
         repo_config = await get_repo_config(
             gh, src_fullname, refresh=is_default_branch and config_changed
         )
     except RepoConfigError as exc:
-        await report_config_error(gh, want_sha, exc)
+        # only report the default branch config's error when this push isn't trying to fix it
+        if is_default_branch or not config_changed:
+            await report_config_error(gh, want_sha, exc)
+        # if the config has changes and not on default branch, validate the new config
+        if not is_default_branch:
+            await validate_config_change(gh, changed_files, want_sha)
         return
+
+    # validate the changes when the default branch config doesn't have issues
+    if not is_default_branch:
+        await validate_config_change(gh, changed_files, want_sha)
 
     dest_fullname = repo_config.dest_fullname
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
@@ -387,6 +403,46 @@ async def remove_branch(
 # -----------------------------------
 
 
+async def validate_config_change(
+    gh: GitHubClient, changed_files: Collection[str], head_sha: str
+) -> None:
+    """
+    Validate the Hubcast repo config at head_sha if changed_files touches it,
+    reporting feedback via a GH check.
+
+    This is meant to supersede previously reported config errors on the default branch.
+    """
+    if gh.repo_config_path not in changed_files:
+        return
+
+    # config was deleted in this change
+    config = await gh.get_repo_config(ref=head_sha)
+    if config is None:
+        return
+
+    try:
+        parse_repo_config(config)
+    except RepoConfigError as exc:
+        exc.log(log)
+        await gh.set_check_status(
+            head_sha,
+            ERROR_CHECK_NAME,
+            "failure",
+            title=exc.title,
+            summary=exc.summary,
+        )
+        return
+
+    # report success if validation passes for the PR's config
+    await gh.set_check_status(
+        head_sha,
+        ERROR_CHECK_NAME,
+        "success",
+        title=CONFIG_VALID_TITLE,
+        summary=CONFIG_VALID_SUMMARY,
+    )
+
+
 async def sync_pr(
     pull_request: dict[str, Any],
     gh: GitHubClient,
@@ -418,12 +474,21 @@ async def sync_pr(
         )
         return
 
+    changed_files = await gh.get_pr_files(pull_request["number"])
+    config_changed = gh.repo_config_path in changed_files
+
     # get the repository configuration from .github/hubcast.yml
     try:
         repo_config = await get_repo_config(gh, base_fullname)
     except RepoConfigError as exc:
-        await report_config_error(gh, want_sha, exc)
+        # only report the default branch config's error when this push isn't trying to fix it
+        if not config_changed:
+            await report_config_error(gh, want_sha, exc)
+        await validate_config_change(gh, changed_files, want_sha)
         return
+
+    # validate the changes when the default branch config doesn't have issues
+    await validate_config_change(gh, changed_files, want_sha)
 
     if not repo_config.sync_drafts and pull_request["draft"]:
         if repo_config.sync_drafts_msg:
