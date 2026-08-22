@@ -156,10 +156,25 @@ async def test_get_repo_config_refreshes(mock_github_client):
 
 
 @pytest.mark.asyncio
-async def test_get_repo_config_invalid_yaml():
+@pytest.mark.parametrize(
+    "raw_config,expected_detail",
+    [
+        pytest.param(
+            "invalid: yaml: :",
+            "mapping values are not allowed here",
+            id="scanner_error",
+        ),
+        pytest.param(
+            "Repo:\n  dest_org: owner\n  dest_name: \x01repo\n",
+            "special characters are not allowed",
+            id="reader_error",
+        ),
+    ],
+)
+async def test_get_repo_config_invalid_yaml(raw_config, expected_detail):
     """Test handling of invalid YAML in repo config."""
     gh = AsyncMock()
-    gh.get_repo_config = AsyncMock(return_value="invalid: yaml: :")
+    gh.get_repo_config = AsyncMock(return_value=raw_config)
     gh.repo_owner = "owner"
     gh.repo_name = "repo"
 
@@ -170,7 +185,8 @@ async def test_get_repo_config_invalid_yaml():
 
     # route handlers report these to the user via a failed check
     assert exc_info.value.title == CONFIG_INVALID_TITLE
-    assert exc_info.value.summary == CONFIG_INVALID_SUMMARY
+    assert exc_info.value.summary.startswith(CONFIG_INVALID_SUMMARY)
+    assert expected_detail in exc_info.value.summary
 
 
 @pytest.mark.asyncio
@@ -187,7 +203,9 @@ async def test_get_repo_config_missing_repo_key():
 
     assert "top-level 'Repo' section" in exc_info.value.context["error"]
     assert exc_info.value.title == CONFIG_INVALID_TITLE
-    assert exc_info.value.summary == CONFIG_INVALID_SUMMARY
+    assert exc_info.value.summary.startswith(CONFIG_INVALID_SUMMARY)
+    # the specific validation issue should beq in the summary shown to users
+    assert "top-level 'Repo' section" in exc_info.value.summary
 
 
 @pytest.mark.asyncio
@@ -202,7 +220,8 @@ async def test_get_repo_config_missing_required_fields():
     with pytest.raises(RepoConfigError, match="Invalid repo config") as exc_info:
         await get_repo_config(gh, "owner/repo")
 
-    assert "Field required" in exc_info.value.context["error"]
+    assert "dest_name" in exc_info.value.summary
+    assert "Field required" in exc_info.value.summary
 
 
 @pytest.mark.asyncio

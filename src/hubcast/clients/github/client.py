@@ -122,7 +122,12 @@ class GitHubClient:
                 url = f"/repos/{self.repo_owner}/{self.repo_name}/check-runs/{existing_check['id']}"
                 await gh.patch(url, data=payload)
 
-    async def get_repo_config(self) -> str | None:
+    async def get_repo_config(self, ref: str | None = None) -> str | None:
+        """Get the contents of the repo's hubcast config file.
+
+        Args:
+            ref: Where to read the file from. Defaults to the repo's default branch.
+        """
         gh_token = await self.auth.authenticate_installation(
             self.repo_owner, self.repo_name
         )
@@ -132,6 +137,8 @@ class GitHubClient:
 
             # get the contents of the repository hubcast.yml file
             url = f"/repos/{self.repo_owner}/{self.repo_name}/contents/{self.repo_config_path}"
+            if ref is not None:
+                url = f"{url}?ref={ref}"
             # get raw contents rather than base64 encoded text
             try:
                 return await gh.getitem(url, accept="application/vnd.github.raw")
@@ -141,6 +148,19 @@ class GitHubClient:
                     return
                 # all others are unhandled
                 raise
+
+    async def get_pr_files(self, pr_number: int) -> list[str]:
+        """Return the files changed in a PR."""
+        gh_token = await self.auth.authenticate_installation(
+            self.repo_owner, self.repo_name
+        )
+
+        async with aiohttp.ClientSession() as session:
+            gh = gh_aiohttp.GitHubAPI(session, self.requester, oauth_token=gh_token)
+
+            url = f"/repos/{self.repo_owner}/{self.repo_name}/pulls/{pr_number}/files"
+            files = await gh.getitem(url)
+            return [f["filename"] for f in files]
 
     async def get_pr(self, id: int) -> dict[str, Any]:
         """Return individual PR data."""
