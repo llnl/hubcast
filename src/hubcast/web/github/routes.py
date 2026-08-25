@@ -451,10 +451,12 @@ async def sync_pr(
     src_repo_private: bool,
     want_sha: str,
     default_branch: str,
-) -> None:
+) -> bool:
     """Sync the git fork/branch referenced in a PR to GitLab.
 
     This isn't technically an event handler, but is used a couple different ways in this file.
+
+    Returns boolean values based on whether the sync occurred or was skipped.
     """
     src_repo_url = pull_request["head"]["repo"]["clone_url"]
     src_fullname = pull_request["head"]["repo"]["full_name"]
@@ -472,7 +474,7 @@ async def sync_pr(
             "Skipped PR sync - private fork",
             extra={"fork_fullname": pull_request["head"]["repo"]["full_name"]},
         )
-        return
+        return False
 
     changed_files = await gh.get_pr_files(pull_request["number"])
     config_changed = gh.repo_config_path in changed_files
@@ -485,7 +487,7 @@ async def sync_pr(
         if not config_changed:
             await report_config_error(gh, want_sha, exc)
         await validate_config_change(gh, changed_files, want_sha)
-        return
+        return False
 
     # validate the changes when the default branch config doesn't have issues
     await validate_config_change(gh, changed_files, want_sha)
@@ -499,7 +501,7 @@ async def sync_pr(
                 title="Hubcast disables sync for draft PRs.",
             )
         log.info("Skipped PR sync - draft PR")
-        return
+        return False
 
     dest_fullname = repo_config.dest_fullname
     dest_remote_url = f"{gl.instance_url}/{dest_fullname}.git"
@@ -532,7 +534,7 @@ async def sync_pr(
 
     # sync failed (logged in _sync_ref)
     if not synced:
-        return
+        return False
 
     # create MRs if configured
     # skip already created MRs
@@ -548,6 +550,8 @@ async def sync_pr(
             ref_url=pull_request["html_url"],
         )
         log.info("Created MR", extra={"branch": sync_branch})
+
+    return True
 
 
 @router.register("pull_request", action="opened")
@@ -670,7 +674,7 @@ async def respond_comment(
             pull_request = event.data["pull_request"]
             src_repo_private = pull_request["head"]["repo"]["private"]
             # sync the approved commit explicitly
-            await sync_pr(
+            synced = await sync_pr(
                 pull_request,
                 gh,
                 gl,
@@ -679,11 +683,12 @@ async def respond_comment(
                 want_sha=commit_sha,
                 default_branch=event.data["repository"]["default_branch"],
             )
-            plus_one = True
-            log.info(
-                "Mirrored ref with approval from review comment",
-                extra={"ref": commit_sha},
-            )
+            if synced:
+                plus_one = True
+                log.info(
+                    "Mirrored ref with approval from review comment",
+                    extra={"ref": commit_sha},
+                )
         else:
             response = (
                 "To mirror this PR, please use the "
