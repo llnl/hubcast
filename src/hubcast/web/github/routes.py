@@ -451,6 +451,7 @@ async def sync_pr(
     src_repo_private: bool,
     want_sha: str,
     default_branch: str,
+    force_sync_draft: bool = False,  # allows draft PRs to be manually synced
 ) -> None:
     """Sync the git fork/branch referenced in a PR to GitLab.
 
@@ -490,7 +491,7 @@ async def sync_pr(
     # validate the changes when the default branch config doesn't have issues
     await validate_config_change(gh, changed_files, want_sha)
 
-    if not repo_config.sync_drafts and pull_request["draft"]:
+    if not force_sync_draft and not repo_config.sync_drafts and pull_request["draft"]:
         if repo_config.sync_drafts_msg:
             await gh.set_check_status(
                 want_sha,
@@ -669,7 +670,7 @@ async def respond_comment(
             commit_sha = event.data["review"]["commit_id"]
             pull_request = event.data["pull_request"]
             src_repo_private = pull_request["head"]["repo"]["private"]
-            # sync the approved commit explicitly
+            # sync the approved commit explicitly even if sync_drafts is disabled
             await sync_pr(
                 pull_request,
                 gh,
@@ -678,6 +679,7 @@ async def respond_comment(
                 src_repo_private,
                 want_sha=commit_sha,
                 default_branch=event.data["repository"]["default_branch"],
+                force_sync_draft=True,
             )
             plus_one = True
             log.info(
