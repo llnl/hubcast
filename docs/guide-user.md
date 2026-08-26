@@ -34,6 +34,7 @@ Repo:
   delete_closed: true
 
   # Optional: sync draft PRs/MRs (default: true)
+  # regardless of this setting, a draft PR can still be synced manually with `approve`
   sync_drafts: true
 
   # Optional: post message when draft sync is disabled (default: true)
@@ -116,6 +117,8 @@ Replace `@{bot}` with your instance's bot user (e.g., `@lc-hubcast`) or use `/hu
 
 ### Approval
 To securely mirror changes from external collaborators, approvals must be done via commenting on a PR review, ensuring that it is linked to a specific commit.
+
+`approve` always syncs the reviewed commit, even for a draft PR where `sync_drafts` is disabled for the repo.
 
 ![A GitHub pull request review; the user has written a comment `@lc-hubcast approve` to sync the user's contributions.](/docs/img/approve-comment.png)
 
