@@ -88,10 +88,6 @@ def parse_repo_config(raw_config: str) -> RepoConfig:
 async def get_repo_config(gh: GitHubClient) -> RepoConfig:
     """Fetch and validate the repository configuration from GitHub.
 
-    Fetched fresh on every event so all replicas always see the current
-    destination repo; a single contents-API call is well within App
-    installation rate limits.
-
     Args:
         gh: GitHub client instance
 
@@ -106,8 +102,10 @@ async def get_repo_config(gh: GitHubClient) -> RepoConfig:
 
     if fetched_config is None:  # 404
         # raise so route handlers can't continue
+        #
         # we don't want to raise this as a RepoConfigError because telling users
-        # about the absence of the config will create noise and confusion
+        # about the absence of the config will create noise and confusion as
+        # they may have installed the app but have not submitted a config file yet
         raise HubcastError("Repo config file not found", log_level="INFO")
 
     # parse and validate YAML
