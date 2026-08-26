@@ -141,7 +141,6 @@ async def test_get_repo_config(mock_github_client):
         ),
     ],
 )
-
 async def test_get_repo_config_invalid_yaml(raw_config, expected_detail):
     """Test handling of invalid YAML in repo config."""
     gh = AsyncMock()
