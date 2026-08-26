@@ -8,9 +8,8 @@ version = "0.0.1"
 dependencies = [
     "aiohttp",
     "aiojobs",
-    "cachetools",
-    "gidgethub",
-    "gidgetlab>=2.1.2",
+    "gidgethub[aiohttp]",
+    "gidgetlab[aiohttp]>=2.1.2",
     "pydantic",
     "pydantic-settings",
     "pyjwt",
