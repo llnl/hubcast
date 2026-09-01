@@ -1,3 +1,13 @@
-from .client import GitLabClient, GitLabClientFactory
+from .client import (
+    GitLabDestClient,
+    GitLabDestClientFactory,
+    GitLabSrcClient,
+    GitLabSrcClientFactory,
+)
 
-__all__ = ["GitLabClient", "GitLabClientFactory"]
+__all__ = [
+    "GitLabDestClient",
+    "GitLabDestClientFactory",
+    "GitLabSrcClient",
+    "GitLabSrcClientFactory",
+]

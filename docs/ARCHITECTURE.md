@@ -74,4 +74,7 @@ Inbound events are received through dedicated webhook endpoints for the source a
 `v1` of the Hubcast API is defined as follows:
 
 - `/v1/events/src/github`:  GitHub source forge event handler
+- `/v1/events/src/gitlab`:  GitLab source forge event handler
 - `/v1/events/dest/gitlab`: GitLab destination forge event handler
+
+Only one source forge event handler is registered per Hubcast instance, based on its configured source forge.
