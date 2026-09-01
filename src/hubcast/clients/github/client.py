@@ -5,6 +5,9 @@ import aiohttp
 from gidgethub import HTTPException
 from gidgethub import aiohttp as gh_aiohttp
 
+from hubcast.exceptions import HubcastError
+from hubcast.webhook import GitHubRoutingToken, GitLabRoutingToken
+
 from .auth import GitHubAuthenticator
 
 log = logging.getLogger(__name__)
@@ -32,8 +35,23 @@ class GitHubClientFactory:
             self.auth, self.requester, repo_owner, repo_name, self.bot_caller
         )
 
+    def create_client_from_token(
+        self, routing_token: GitHubRoutingToken | GitLabRoutingToken
+    ) -> "GitHubClient":
+        """creates a GitHubClient for the repo identified by a routing token"""
+        if routing_token.src_forge != "github":
+            # needed to pass type checking b/c RoutingToken is a discriminated union with different fields
+            raise HubcastError(
+                "routing token is GitLabRoutingToken; this Hubcast instance mirrors from GitHub"
+            )
+        return self.create_client(routing_token.gh_owner, routing_token.gh_repo)
+
 
 class GitHubClient:
+    # check-status states specific to this forge
+    FAILURE_STATUS = "failure"
+    SUCCESS_STATUS = "success"
+
     def __init__(
         self,
         auth: GitHubAuthenticator,
