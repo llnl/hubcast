@@ -1,43 +1,38 @@
 import logging
 import re
-from collections.abc import Awaitable, Callable, Collection
 from typing import Any
 
-from aiohttp.client_exceptions import ClientResponseError
 from gidgethub import routing, sansio
 from gidgetlab.exceptions import BadRequest
-from repligit.asyncio import fetch_pack, ls_remote, send_pack
-from repligit.exceptions import RefUpdateRejected
 
 from hubcast.clients.github.client import GitHubClient
-from hubcast.clients.gitlab.client import GitLabClient
+from hubcast.clients.gitlab.client import GitLabDestClient
 from hubcast.exceptions import HubcastError, RepoConfigError, WebhookPermissionError
 from hubcast.logging import update_log_context
-from hubcast.web.github.messages import (
-    CONFIG_VALID_SUMMARY,
-    CONFIG_VALID_TITLE,
-    DEACTIVATED_ACCOUNT_MARKER,
+from hubcast.web.github.messages import help_message
+from hubcast.web.messages import (
     DEACTIVATED_ACCOUNT_MSG,
-    HOOK_DECLINED_MSG,
-    HOOK_DECLINED_SUMMARY,
-    HOOK_DECLINED_TITLE,
     INTERNAL_ERROR_SUMMARY,
     INTERNAL_ERROR_TITLE,
-    PERMISSION_DENIED_DELETE_LOG_MSG,
-    PERMISSION_DENIED_STATUSES,
     PERMISSION_DENIED_SUMMARY,
-    PERMISSION_DENIED_SYNC_LOG_MSG,
     PERMISSION_DENIED_TITLE,
     PIPELINE_FAILED_MSG,
     WEBHOOK_PERMISSION_DENIED_SUMMARY,
     WEBHOOK_PERMISSION_DENIED_TITLE,
-    help_message,
 )
-from hubcast.web.github.utils import (
+from hubcast.web.utils import (
+    ERROR_CHECK_NAME,
+    PERMISSION_DENIED_STATUSES,
+    _delete_ref,
+    _sync_ref,
     changed_files_from_push,
     get_repo_config,
-    parse_repo_config,
+    is_deactivated_account,
+    permission_denied_response,
+    report_config_error,
+    validate_config_change,
 )
+from hubcast.webhook import GitHubRoutingToken
 
 log = logging.getLogger(__name__)
 
@@ -62,27 +57,6 @@ class GitHubRouter(routing.Router):
 router = GitHubRouter()
 
 
-# check name used to report errors about repo config or webhooks
-# this avoids overwriting errors if a normal pipeline succeeds, and provides
-# a default for situations where there is no default check name set
-# this check won't linger because resolving issues requires a new commit to be pushed
-ERROR_CHECK_NAME = "hubcast-config"
-
-NULL_SHA = "0" * 40
-
-
-async def report_config_error(gh: GitHubClient, sha: str, exc: RepoConfigError) -> None:
-    """Report a missing/invalid repo config to the user as a failed check."""
-    exc.log(log)
-    await gh.set_check_status(
-        sha,
-        ERROR_CHECK_NAME,
-        "failure",
-        title=exc.title,
-        summary=exc.summary,
-    )
-
-
 def _pr_branch_name(pull_request: dict[str, Any]) -> str:
     """Return the branch name used on the destination for this PR.
 
@@ -97,167 +71,6 @@ def _pr_branch_name(pull_request: dict[str, Any]) -> str:
     return pull_request["head"]["ref"]
 
 
-def _is_deactivated_account(exc: BadRequest) -> bool:
-    """Whether a GitLab permission-denied error was caused by a deactivated account."""
-    return DEACTIVATED_ACCOUNT_MARKER in str(exc)
-
-
-def _permission_denied_response(exc: BadRequest) -> str:
-    """User-facing message for a GitLab permission-denied error from a comment command."""
-    if _is_deactivated_account(exc):
-        return DEACTIVATED_ACCOUNT_MSG
-    return PERMISSION_DENIED_SUMMARY
-
-
-async def _sync_ref(
-    gh: GitHubClient,
-    gl: GitLabClient,
-    gl_user: str,
-    dest_remote_url: str,
-    sync_ref: str,
-    want_sha: str,
-    src_repo_url: str,
-    # auth rules differ by caller, which needs to provide its own closure
-    get_src_creds: Callable[[], Awaitable[dict[str, str]]],
-    check_name: str,
-    entity: str,
-) -> bool:
-    """Sync `sync_ref` on the destination to `want_sha`, fetching from `src_repo_url`.
-    Permission issues and Repligit errors are reported as GitHub checks to `want_sha`.
-
-    Returns True in a success state (up-to-date or sync performed), otherwise False.
-    """
-    gl_token = await gl.auth.authenticate_user(gl_user)
-
-    try:
-        gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
-    except ClientResponseError as exc:
-        if exc.status not in PERMISSION_DENIED_STATUSES:
-            raise
-        log.info(PERMISSION_DENIED_SYNC_LOG_MSG)
-        await gh.set_check_status(
-            want_sha,
-            check_name,
-            "failure",
-            title=PERMISSION_DENIED_TITLE,
-            summary=PERMISSION_DENIED_SUMMARY,
-        )
-        return False
-
-    have_shas = set(gl_refs.values())
-    from_sha = gl_refs.get(sync_ref) or NULL_SHA
-    update_log_context(from_sha=from_sha, want_sha=want_sha)
-
-    # directly check from_sha equals want_sha for cases where the sha has
-    # already been mirrored but the ref is out-of-date. This is commonly the
-    # case for tags that are created against an existing commit on a branch.
-    if from_sha == want_sha:
-        log.info(f"Skipped {entity} sync - already up-to-date")
-        return True
-
-    # each caller has different rules for fetching the packfile from src_repo_url
-    src_creds = await get_src_creds()
-    packfile = await fetch_pack(src_repo_url, want_sha, have_shas, **src_creds)
-    if packfile is None:
-        raise HubcastError(
-            f"Failed to fetch packfile for {want_sha} from {src_repo_url}"
-        )
-
-    log.info(f"Syncing {entity}")
-    try:
-        await send_pack(
-            dest_remote_url,
-            sync_ref,
-            from_sha,
-            want_sha,
-            packfile,
-            username=gl_user,
-            password=gl_token,
-        )
-    except ClientResponseError as exc:
-        if exc.status not in PERMISSION_DENIED_STATUSES:
-            raise
-        log.info(PERMISSION_DENIED_SYNC_LOG_MSG)
-        await gh.set_check_status(
-            want_sha,
-            check_name,
-            "failure",
-            title=PERMISSION_DENIED_TITLE,
-            summary=PERMISSION_DENIED_SUMMARY,
-        )
-        return False
-    # repligit
-    except RefUpdateRejected as exc:
-        hook_declined = str(exc) == HOOK_DECLINED_MSG
-        await gh.set_check_status(
-            want_sha,
-            check_name,
-            "failure",
-            title=HOOK_DECLINED_TITLE if hook_declined else INTERNAL_ERROR_TITLE,
-            summary=HOOK_DECLINED_SUMMARY if hook_declined else INTERNAL_ERROR_SUMMARY,
-        )
-        if not hook_declined:
-            raise
-        return False
-
-    log.info(f"Synced {entity}")
-    return True
-
-
-async def _delete_ref(
-    gl: GitLabClient,
-    gl_user: str,
-    dest_remote_url: str,
-    sync_ref: str,
-    entity: str,
-) -> None:
-    """Delete `sync_ref` from the destination, if it exists."""
-    gl_token = await gl.auth.authenticate_user(gl_user)
-
-    try:
-        gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
-    except ClientResponseError as exc:
-        if exc.status not in PERMISSION_DENIED_STATUSES:
-            raise
-        # we cannot set GitHub status checks for deleted refs, and we have no way to notify the user of this failure
-        log.info(PERMISSION_DENIED_DELETE_LOG_MSG)
-        return
-
-    head_sha = gl_refs.get(sync_ref)
-    update_log_context(head_sha=head_sha)
-
-    if head_sha is None:
-        log.info(f"Skipped {entity} removal - ref not found")
-        return
-
-    log.info(f"Deleting {entity}")
-
-    try:
-        await send_pack(
-            dest_remote_url,
-            sync_ref,
-            head_sha,
-            NULL_SHA,
-            b"",
-            username=gl_user,
-            password=gl_token,
-        )
-    except ClientResponseError as exc:
-        if exc.status not in PERMISSION_DENIED_STATUSES:
-            raise
-        log.info(PERMISSION_DENIED_DELETE_LOG_MSG)
-        return
-    # repligit
-    except RefUpdateRejected as exc:
-        if str(exc) != HOOK_DECLINED_MSG:
-            # raise unknown ref update rejected errors for later debugging
-            raise
-        log.info(str(exc))
-        return
-
-    log.info(f"Deleted {entity}")
-
-
 # -----------------------------------
 # Push Events
 # -----------------------------------
@@ -265,7 +78,7 @@ async def _delete_ref(
 async def sync_branch(
     event: sansio.Event,
     gh: GitHubClient,
-    gl: GitLabClient,
+    gl: GitLabDestClient,
     gl_user: str,
     *arg,
     **kwargs,
@@ -313,14 +126,17 @@ async def sync_branch(
     # file (avoids spurious permission errors on unrelated pushes); maintainers
     # can also force it by including [hubcast config] in the commit message
     if is_default_branch and (config_changed or "[hubcast config]" in commit_msg):
+        routing_token = GitHubRoutingToken(
+            gh_owner=src_owner,
+            gh_repo=src_repo_name,
+            gh_check=repo_config.check_name,
+            check_types=repo_config.check_types,
+        )
         try:
             await gl.set_webhook(
                 dest_org=repo_config.dest_org,
                 dest_repo=repo_config.dest_name,
-                gh_owner=src_owner,
-                gh_repo=src_repo_name,
-                gh_check=repo_config.check_name,
-                check_types=repo_config.check_types,
+                routing_token=routing_token,
             )
         except WebhookPermissionError as exc:
             # the user is not a maintainer and we need to tell them to push config changes with higher permissions
@@ -328,7 +144,7 @@ async def sync_branch(
             await gh.set_check_status(
                 want_sha,
                 ERROR_CHECK_NAME,
-                "failure",
+                gh.FAILURE_STATUS,
                 title=WEBHOOK_PERMISSION_DENIED_TITLE,
                 summary=WEBHOOK_PERMISSION_DENIED_SUMMARY,
             )
@@ -339,7 +155,7 @@ async def sync_branch(
             await gh.set_check_status(
                 want_sha,
                 ERROR_CHECK_NAME,
-                "failure",
+                gh.FAILURE_STATUS,
                 title=INTERNAL_ERROR_TITLE,
                 summary=INTERNAL_ERROR_SUMMARY,
             )
@@ -374,7 +190,7 @@ async def sync_branch(
 async def remove_branch(
     event: sansio.Event,
     gh: GitHubClient,
-    gl: GitLabClient,
+    gl: GitLabDestClient,
     gl_user: str,
     *arg,
     **kwargs,
@@ -396,50 +212,10 @@ async def remove_branch(
 # -----------------------------------
 
 
-async def validate_config_change(
-    gh: GitHubClient, changed_files: Collection[str], head_sha: str
-) -> None:
-    """
-    Validate the Hubcast repo config at head_sha if changed_files touches it,
-    reporting feedback via a GH check.
-
-    This is meant to supersede previously reported config errors on the default branch.
-    """
-    if gh.repo_config_path not in changed_files:
-        return
-
-    # config was deleted in this change
-    config = await gh.get_repo_config(ref=head_sha)
-    if config is None:
-        return
-
-    try:
-        parse_repo_config(config)
-    except RepoConfigError as exc:
-        exc.log(log)
-        await gh.set_check_status(
-            head_sha,
-            ERROR_CHECK_NAME,
-            "failure",
-            title=exc.title,
-            summary=exc.summary,
-        )
-        return
-
-    # report success if validation passes for the PR's config
-    await gh.set_check_status(
-        head_sha,
-        ERROR_CHECK_NAME,
-        "success",
-        title=CONFIG_VALID_TITLE,
-        summary=CONFIG_VALID_SUMMARY,
-    )
-
-
 async def sync_pr(
     pull_request: dict[str, Any],
     gh: GitHubClient,
-    gl: GitLabClient,
+    gl: GitLabDestClient,
     gl_user: str,
     src_repo_private: bool,
     want_sha: str,
@@ -551,7 +327,7 @@ async def sync_pr(
 async def sync_pr_event(
     event: sansio.Event,
     gh: GitHubClient,
-    gl: GitLabClient,
+    gl: GitLabDestClient,
     gl_user: str,
     *arg,
     **kwargs,
@@ -580,7 +356,7 @@ async def sync_pr_event(
 async def remove_pr(
     event: sansio.Event,
     gh: GitHubClient,
-    gl: GitLabClient,
+    gl: GitLabDestClient,
     gl_user: str,
     *arg,
     **kwargs,
@@ -620,7 +396,7 @@ async def remove_pr(
 async def respond_comment(
     event: sansio.Event,
     gh: GitHubClient,
-    gl: GitLabClient,
+    gl: GitLabDestClient,
     gl_user: str,
     *arg,
     **kwargs,
@@ -711,7 +487,7 @@ async def respond_comment(
             pipeline_url = await gl.run_pipeline(dest_fullname, branch)
         except BadRequest as exc:
             if exc.status_code in PERMISSION_DENIED_STATUSES:
-                response = _permission_denied_response(exc)
+                response = permission_denied_response(exc)
                 log.info("Pipeline failed to start - insufficient permissions")
             elif exc.status_code == 400:
                 # \n to avoid indent markdown issues
@@ -746,7 +522,7 @@ async def respond_comment(
         except BadRequest as exc:
             if exc.status_code not in PERMISSION_DENIED_STATUSES:
                 raise
-            response = _permission_denied_response(exc)
+            response = permission_denied_response(exc)
             log.info("Pipeline ID fetch failed - insufficient permissions")
         else:
             if pipeline_id:
@@ -757,7 +533,7 @@ async def respond_comment(
                 except BadRequest as exc:
                     if exc.status_code not in PERMISSION_DENIED_STATUSES:
                         raise
-                    response = _permission_denied_response(exc)
+                    response = permission_denied_response(exc)
                     log.info("Jobs restart failed - insufficient permissions")
                 else:
                     response = f"I've retried any failed jobs in the [pipeline]({pipeline_url})!"
@@ -791,7 +567,7 @@ async def _fail_check_from_pipeline_error(
 ) -> None:
     """Set a failing check status from a GitLab pipeline/job start error."""
     if exc.status_code in PERMISSION_DENIED_STATUSES:
-        deactivated = _is_deactivated_account(exc)
+        deactivated = is_deactivated_account(exc)
         message = DEACTIVATED_ACCOUNT_MSG if deactivated else PERMISSION_DENIED_TITLE
         summary = "" if deactivated else PERMISSION_DENIED_SUMMARY
     elif exc.status_code == 400:
@@ -803,7 +579,7 @@ async def _fail_check_from_pipeline_error(
     await gh.set_check_status(
         check_run_commit,
         check_name,
-        "failure",
+        gh.FAILURE_STATUS,
         title=message,
         summary=summary,
     )
@@ -813,7 +589,7 @@ async def _fail_check_from_pipeline_error(
 async def rerun_check(
     event: sansio.Event,
     gh: GitHubClient,
-    gl: GitLabClient,
+    gl: GitLabDestClient,
     gl_user: str,
     *arg,
     **kwargs,

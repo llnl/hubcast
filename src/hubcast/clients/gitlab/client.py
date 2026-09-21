@@ -4,18 +4,28 @@ from typing import Any, Literal
 
 import aiohttp
 import gidgetlab.aiohttp
+import gidgetlab.exceptions
 
 from hubcast.clients.gitlab.auth import (
     GitLabAuthenticator,
     GitLabSingleUserAuthenticator,
 )
 from hubcast.exceptions import HubcastError, WebhookPermissionError
-from hubcast.webhook import RoutingToken
+from hubcast.webhook import GitHubRoutingToken, GitLabRoutingToken, encode_routing_token
 
 log = logging.getLogger(__name__)
 
+# GitLab's emoji API takes gemoji short names (mapping from GH emoji ids)
+GL_REACTIONS = {
+    "+1": "thumbsup",
+}
 
-class GitLabClientFactory:
+
+# gitlab commit statuses have a hard character limit
+GL_STATUS_DESCRIPTION_MAX_LENGTH = 255
+
+
+class GitLabDestClientFactory:
     def __init__(
         self,
         instance_url: str,
@@ -23,24 +33,22 @@ class GitLabClientFactory:
         token: str,
         callback_url: str,
         webhook_secret: str,
-        token_type: str = "impersonation",  # nosec B107
+        token_type: Literal["impersonation", "single"] = "impersonation",  # nosec B107
     ):
         self.requester = requester
 
         if token_type == "single":  # nosec B105
             self.auth = GitLabSingleUserAuthenticator(token)
-        elif token_type == "impersonation":  # nosec B105
-            self.auth = GitLabAuthenticator(instance_url, requester, token)
         else:
-            raise ValueError(f"Unknown GitLab token type: {token_type}")
+            self.auth = GitLabAuthenticator(instance_url, requester, token)
 
         self.instance_url = instance_url
         self.callback_url = callback_url
         self.webhook_secret = webhook_secret
 
-    def create_client(self, user: str) -> "GitLabClient":
-        """creates a GitLabClient for a specific user"""
-        return GitLabClient(
+    def create_client(self, user: str) -> "GitLabDestClient":
+        """creates a GitLabDestClient for a specific user"""
+        return GitLabDestClient(
             self.auth,
             self.requester,
             self.instance_url,
@@ -50,7 +58,7 @@ class GitLabClientFactory:
         )
 
 
-class GitLabClient:
+class GitLabDestClient:
     def __init__(
         self,
         auth: GitLabAuthenticator | GitLabSingleUserAuthenticator,
@@ -92,7 +100,7 @@ class GitLabClient:
         gl_fullname: str,
         src_branch: str,
         target_branch: str,
-        ref_title: int,
+        ref_title: str,
         ref_url: str,
     ):
         """Create a merge request in GitLab.
@@ -101,8 +109,8 @@ class GitLabClient:
             gl_fullname: GitLab project name
             src_branch: Source branch for the MR
             target_branch: Target (base) branch for the MR
-            ref_title: GitHub PR title
-            ref_url: GitHub PR URL to include in the MR description
+            ref_title: Source PR/MR title
+            ref_url: Source PR/MR URL to include in the MR description
         """
         gl_token = await self.auth.authenticate_user(username=self.user)
 
@@ -130,22 +138,15 @@ class GitLabClient:
         self,
         dest_org: str,
         dest_repo: str,
-        gh_owner: str,
-        gh_repo: str,
-        gh_check: str,
-        check_types: list[Literal["pipeline", "child-pipelines", "jobs"]],
+        routing_token: GitHubRoutingToken | GitLabRoutingToken,
     ) -> None:
         gl_token = await self.auth.authenticate_user(username=self.user)
         gl_fullname = f"{dest_org}/{dest_repo}"
 
-        # Generate unique signed token for this webhook containing routing information
-        routing_token = RoutingToken(
-            gh_owner=gh_owner,
-            gh_repo=gh_repo,
-            gh_check=gh_check,
-            check_types=check_types,
-        )
-        token = routing_token.encode(self.webhook_secret)
+        # the webhook's token doubles as its secret and encodes routing
+        # information back to whichever source repo/forge triggered this sync
+        token = encode_routing_token(routing_token, self.webhook_secret)
+        check_types = routing_token.check_types
 
         new_hook = {
             "token": token,
@@ -325,3 +326,207 @@ class GitLabClient:
             repo_id = urllib.parse.quote_plus(gl_fullname)
 
             return await gl.getitem(f"/projects/{repo_id}/repository/commits/{sha}")
+
+
+class GitLabSrcClientFactory:
+    def __init__(
+        self, instance_url: str, access_token: str, requester: str, bot_caller: str
+    ):
+        # there is no equivalent to github apps so we use a bot account to perform actions
+        self.auth = GitLabSingleUserAuthenticator(access_token)
+        self.instance_url = instance_url
+        self.requester = requester
+        self.bot_caller = bot_caller
+
+    def create_client(self, repo_id: int | str) -> "GitLabSrcClient":
+        """creates a GitLabSrcClient for a specific project"""
+        return GitLabSrcClient(
+            self.auth, self.requester, self.instance_url, repo_id, self.bot_caller
+        )
+
+    def create_client_from_token(
+        self, routing_token: GitHubRoutingToken | GitLabRoutingToken
+    ) -> "GitLabSrcClient":
+        """creates a GitLabSrcClient for the project identified by a routing token"""
+        if routing_token.src_forge != "gitlab":
+            # needed to pass type checking b/c RoutingToken is a discriminated union with different fields
+            raise HubcastError(
+                "routing token is GitHubRoutingToken; this Hubcast instance mirrors from GitLab"
+            )
+        return self.create_client(routing_token.gl_repo_id)
+
+
+class GitLabSrcClient:
+    # check-status states specific to this forge
+    FAILURE_STATUS = "failed"
+    SUCCESS_STATUS = "success"
+
+    def __init__(
+        self,
+        auth: GitLabSingleUserAuthenticator,
+        requester: str,
+        instance_url: str,
+        repo_id: int | str,
+        bot_caller: str,
+    ):
+        self.auth = auth
+        self.requester = requester
+        self.instance_url = instance_url
+        self.repo_id = repo_id
+        self.bot_caller = bot_caller
+        # path to the hubcast config file within a repository, relative to its root
+        self.repo_config_path = ".gitlab/hubcast.yml"
+
+    async def get_repo_config(self, ref: str | None = None) -> str | None:
+        """Get the contents of the repo's hubcast config file.
+
+        Args:
+            ref: Where to read the file from. Defaults to the repo's default branch.
+        """
+        gl_token = await self.auth.authenticate_user(self.requester)
+
+        async with aiohttp.ClientSession() as session:
+            gl = gidgetlab.aiohttp.GitLabAPI(
+                session, self.requester, access_token=gl_token, url=self.instance_url
+            )
+
+            filepath = urllib.parse.quote_plus(self.repo_config_path)
+            url = f"/projects/{self.repo_id}/repository/files/{filepath}/raw"
+            if ref is not None:
+                url = f"{url}?ref={ref}"
+
+            try:
+                return await gl.getitem(url)
+            except gidgetlab.exceptions.BadRequest as exc:
+                if exc.status_code == 404:
+                    # the repo config was not found: the caller will handle this case
+                    return None
+                # all others are unhandled
+                raise
+
+    async def set_check_status(
+        self,
+        ref: str,
+        check_name: str,
+        status: str,
+        title: str,
+        summary: str = "",
+        details_url: str | None = None,
+    ) -> None:
+        """Set the status of a GitLab commit status."""
+
+        # unlike GH checks, GL commit status only have a description field so we'll combine them
+        description = f"{title}\n{summary}" if summary else title
+        if len(description) > GL_STATUS_DESCRIPTION_MAX_LENGTH:
+            description = description[: GL_STATUS_DESCRIPTION_MAX_LENGTH - 1] + "…"
+
+        payload: dict[str, Any] = {
+            "name": check_name,
+            "state": status,
+            "description": description,
+        }
+        if details_url is not None:
+            payload["target_url"] = details_url
+
+        gl_token = await self.auth.authenticate_user(self.requester)
+
+        async with aiohttp.ClientSession() as session:
+            gl = gidgetlab.aiohttp.GitLabAPI(
+                session, self.requester, access_token=gl_token, url=self.instance_url
+            )
+
+            # get a list of the current statuses on a commit
+            url = f"/projects/{self.repo_id}/repository/commits/{ref}/statuses"
+            data = await gl.getitem(url)
+
+            # search for existing status with this check_name
+            existing_check = None
+            for check in data:
+                if check["name"] == check_name:
+                    existing_check = check
+                    break
+
+            if existing_check:
+                # The ID of the pipeline to set status. used to disambiguate multiple pipelines on the same hash
+                payload["pipeline_id"] = existing_check["pipeline_id"]
+            # else the status will still get posted, forming a new status
+
+            url = f"/projects/{self.repo_id}/statuses/{ref}"
+            try:
+                await gl.post(url, data=payload)
+            except gidgetlab.exceptions.BadRequest as exc:
+                if "Cannot transition status" in str(exc):
+                    # see https://forum.gitlab.com/t/cannot-transition-status-via-run-from-running-reason-s-status-cannot-transition-via-run/42588/7
+                    # happens when a status update would move the state backward/sideways;
+                    # safe to ignore since the user will eventually see the right status
+                    log.info(
+                        "Ignored GitLab status transition conflict",
+                        extra={"ref": ref, "check_name": check_name},
+                    )
+                elif exc.status_code in (401, 403):
+                    # we'll hit this when the source repo is a fork the bot/PAT has no write access to
+                    # https://gitlab.com/gitlab-org/gitlab/-/issues/374133
+                    log.info(
+                        "Failed to set commit status: insufficient permissions on source repository",
+                        extra={"ref": ref, "check_name": check_name},
+                    )
+                else:
+                    raise
+
+    async def get_mrs(self, source_branch: str) -> list[dict[str, Any]]:
+        """Return open MRs for this client's project with the given source branch."""
+        gl_token = await self.auth.authenticate_user(self.requester)
+
+        async with aiohttp.ClientSession() as session:
+            gl = gidgetlab.aiohttp.GitLabAPI(
+                session, self.requester, access_token=gl_token, url=self.instance_url
+            )
+
+            filters = f"source_branch={source_branch}&state=opened"
+            return await gl.getitem(
+                f"/projects/{self.repo_id}/merge_requests?{filters}"
+            )
+
+    async def get_mr_files(self, mr_iid: int) -> list[str]:
+        """Return the files changed in a merge request."""
+        gl_token = await self.auth.authenticate_user(self.requester)
+
+        async with aiohttp.ClientSession() as session:
+            gl = gidgetlab.aiohttp.GitLabAPI(
+                session, self.requester, access_token=gl_token, url=self.instance_url
+            )
+
+            url = f"/projects/{self.repo_id}/merge_requests/{mr_iid}/diffs"
+            diffs = await gl.getitem(url)
+            return [d["new_path"] for d in diffs]
+
+    async def post_comment(self, mr_iid: int, body: str) -> None:
+        payload = {"body": body}
+
+        gl_token = await self.auth.authenticate_user(self.requester)
+
+        async with aiohttp.ClientSession() as session:
+            gl = gidgetlab.aiohttp.GitLabAPI(
+                session, self.requester, access_token=gl_token, url=self.instance_url
+            )
+
+            url = f"/projects/{self.repo_id}/merge_requests/{mr_iid}/notes"
+            await gl.post(url, data=payload)
+
+    async def react_to_comment(self, mr_iid: int, note_id: int, reaction: str) -> None:
+        """
+        Add an emoji reaction to a merge request note.
+        See `GL_REACTIONS.keys()` for a list of emoji options.
+        """
+        gl_token = await self.auth.authenticate_user(self.requester)
+
+        async with aiohttp.ClientSession() as session:
+            gl = gidgetlab.aiohttp.GitLabAPI(
+                session, self.requester, access_token=gl_token, url=self.instance_url
+            )
+
+            url = (
+                f"/projects/{self.repo_id}/merge_requests/{mr_iid}"
+                f"/notes/{note_id}/award_emoji"
+            )
+            await gl.post(url, data={"name": GL_REACTIONS[reaction]})

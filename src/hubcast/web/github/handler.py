@@ -6,7 +6,7 @@ from gidgethub import sansio
 
 from hubcast.account_map.abc import AccountMap
 from hubcast.clients.github.client import GitHubClientFactory
-from hubcast.clients.gitlab.client import GitLabClientFactory
+from hubcast.clients.gitlab.client import GitLabDestClientFactory
 from hubcast.exceptions import HubcastError
 from hubcast.logging import update_log_context
 
@@ -21,7 +21,7 @@ class GitHubHandler:
         webhook_secret: str,
         account_map: AccountMap,
         github_client_factory: GitHubClientFactory,
-        gitlab_client_factory: GitLabClientFactory,
+        gitlab_client_factory: GitLabDestClientFactory,
     ):
         self.webhook_secret = webhook_secret
         self.account_map = account_map

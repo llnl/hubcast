@@ -1,3 +1,3 @@
-from .handler import GitLabHandler
+from .handler import GitLabDestHandler, GitLabSrcHandler
 
-__all__ = ["GitLabHandler"]
+__all__ = ["GitLabDestHandler", "GitLabSrcHandler"]

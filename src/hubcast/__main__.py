@@ -11,16 +11,18 @@ from hubcast.account_map import FileMap
 from hubcast.account_map.abc import AccountMap
 from hubcast.account_map.file import FileMapError
 from hubcast.clients.github import GitHubClientFactory
-from hubcast.clients.gitlab import GitLabClientFactory
+from hubcast.clients.gitlab import GitLabDestClientFactory, GitLabSrcClientFactory
 from hubcast.config import (
     Config,
     ConfigError,
     FileAccountMapConfig,
+    GitHubConfig,
+    GitLabSrcConfig,
     LDAPAccountMapConfig,
     load_config,
 )
 from hubcast.web.github import GitHubHandler
-from hubcast.web.gitlab import GitLabHandler
+from hubcast.web.gitlab import GitLabDestHandler, GitLabSrcHandler
 from hubcast.web.health import health_check
 
 try:
@@ -95,6 +97,42 @@ def initialize_account_map(conf: Config) -> AccountMap:
             )
 
 
+def initialize_src(
+    conf: Config,
+    account_map: AccountMap,
+    gl_client_factory: GitLabDestClientFactory,
+) -> tuple[
+    GitHubHandler | GitLabSrcHandler, GitHubClientFactory | GitLabSrcClientFactory
+]:
+    """Build source forge webhook handlers and client factories"""
+    match conf.src:
+        case GitHubConfig() as gh:
+            gh_client_factory = GitHubClientFactory(
+                gh.app_id, gh.private_key, REQUESTER, gh.bot_caller
+            )
+            handler = GitHubHandler(
+                gh.webhook_secret,
+                account_map,
+                gh_client_factory,
+                gl_client_factory,
+            )
+            return handler, gh_client_factory
+        case GitLabSrcConfig() as gl_src:
+            gl_src_client_factory = GitLabSrcClientFactory(
+                gl_src.url,
+                gl_src.access_token,
+                REQUESTER,
+                gl_src.bot_caller,
+            )
+            handler = GitLabSrcHandler(
+                gl_src.webhook_secret,
+                account_map,
+                gl_src_client_factory,
+                gl_client_factory,
+            )
+            return handler, gl_src_client_factory
+
+
 def main():
     app = web.Application()
 
@@ -107,10 +145,7 @@ def main():
     initialize_logging(conf)
 
     account_map = initialize_account_map(conf)
-    gh_client_factory = GitHubClientFactory(
-        conf.gh.app_id, conf.gh.private_key, REQUESTER, conf.gh.bot_caller
-    )
-    gl_client_factory = GitLabClientFactory(
+    gl_client_factory = GitLabDestClientFactory(
         conf.gl.url,
         REQUESTER,
         conf.gl.token,
@@ -119,23 +154,20 @@ def main():
         conf.gl.token_type,
     )
 
-    gh_handler = GitHubHandler(
-        conf.gh.webhook_secret,
-        account_map,
-        gh_client_factory,
-        gl_client_factory,
+    src_handler, src_client_factory = initialize_src(
+        conf, account_map, gl_client_factory
     )
 
-    gl_handler = GitLabHandler(
+    gl_handler = GitLabDestHandler(
         conf.gl.webhook_secret,
-        gh_client_factory,
+        src_client_factory,
         gl_client_factory,
     )
 
     log.info("Starting HTTP server")
 
     app.router.add_get("/health", health_check)
-    app.router.add_post("/v1/events/src/github", gh_handler.handle)
+    app.router.add_post(f"/v1/events/src/{conf.src.forge}", src_handler.handle)
     app.router.add_post("/v1/events/dest/gitlab", gl_handler.handle)
 
     setup(app)
