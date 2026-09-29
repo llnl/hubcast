@@ -8,19 +8,10 @@ class ConfigError(Exception):
     pass
 
 
-class GitHubConfig(BaseModel):
-    """GitHub source forge configuration."""
+class BotCallerMixin(BaseModel):
+    """Mixin for forge configs with bot-specific fields."""
 
-    # GitHub App ID
-    app_id: str
-
-    # Contents of the app private key file (do not strip newlines)
-    private_key: str
-
-    # Webhook secret for verifying requests from GitHub
-    webhook_secret: str
-
-    # Bot mention prefix for PR commands (e.g., "@lc-hubcast" or "/hubcast")
+    # Bot mention prefix for PR/MR commands (e.g., "@lc-hubcast" or "/hubcast")
     bot_caller: str = "/hubcast"
 
     @field_validator("bot_caller")
@@ -32,14 +23,29 @@ class GitHubConfig(BaseModel):
         return v
 
 
-class GitLabConfig(BaseModel):
+class GitHubConfig(BotCallerMixin):
+    """GitHub source forge configuration."""
+
+    forge: Literal["github"] = "github"
+
+    # GitHub App ID
+    app_id: str
+
+    # Contents of the app private key file (do not strip newlines)
+    private_key: str
+
+    # Webhook secret for verifying requests from GitHub
+    webhook_secret: str
+
+
+class GitLabDestConfig(BaseModel):
     """GitLab destination forge configuration."""
 
     # URL of the GitLab instance (e.g., https://gitlab.com)
     url: str
 
     # Token type: "impersonation" (default) or "single"
-    token_type: str = "impersonation"
+    token_type: Literal["impersonation", "single"] = "impersonation"
 
     # Personal access token with api scope
     token: str
@@ -49,6 +55,21 @@ class GitLabConfig(BaseModel):
 
     # URL where Hubcast receives GitLab events (e.g., https://hubcast.example.com/v1/events/dest/gitlab)
     callback_url: str
+
+
+class GitLabSrcConfig(BotCallerMixin):
+    """GitLab source forge configuration."""
+
+    forge: Literal["gitlab"] = "gitlab"
+
+    # URL of the GitLab instance (e.g., https://gitlab.example.com)
+    url: str
+
+    # PAT for the bot account (scopes: api, read_repository with the Developer role)
+    access_token: str
+
+    # Webhook secret for verifying requests from GitLab
+    webhook_secret: str
 
 
 class FileAccountMapConfig(BaseModel):
@@ -92,6 +113,11 @@ AccountMapConfig = Annotated[
     Field(discriminator="type"),
 ]
 
+SrcConfig = Annotated[
+    GitHubConfig | GitLabSrcConfig,
+    Field(discriminator="forge"),
+]
+
 
 class Config(BaseSettings):
     """Main application configuration."""
@@ -110,8 +136,11 @@ class Config(BaseSettings):
     # Account mapper configuration (file or ldap)
     account_map: AccountMapConfig
 
-    gh: GitHubConfig
-    gl: GitLabConfig
+    # the src forge config
+    src: SrcConfig
+
+    # GitLab destination forge configuration
+    gl: GitLabDestConfig
 
 
 def load_config() -> Config:

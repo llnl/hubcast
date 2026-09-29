@@ -58,6 +58,32 @@ Once your app is created, go to `Private Keys` -> `Generate a private key`, whic
 
 With the GitHub App configured, all repositories that install this app will notify the Hubcast instance of any state change that requires a sync.
 
+## GitLab as a source forge
+
+GitLab has no equivalent to a GitHub App's installable, org-wide integration, so Hubcast instead authenticates to a GitLab source instance via a dedicated bot account, and each source repository's webhook must be configured individually.
+
+1. Create a bot account on the source GitLab instance. This can be a normal user, or a [service account](https://docs.gitlab.com/user/profile/service_accounts).
+2. Create a [personal access token](https://docs.gitlab.com/user/profile/personal_access_tokens/) with the `api` and `read_repository` scopes.
+3. Choose a strong webhook secret; this will be shared among all repositories Hubcast will sync on this source instance.
+4. With the bot account, token, and webhook secret, configure Hubcast with the [GitLab source settings](#gitlab) below.
+
+### Registering repositories to sync
+
+1. For each repository to mirror, an administrator configures a [webhook](https://docs.gitlab.com/user/project/integrations/webhooks.html) pointing at your Hubcast instance (e.g., `https://hubcast.example.com/v1/events/src/gitlab`), with the webhook secret and these triggers enabled:
+  - Push events
+  - Tag push events
+  - Merge request events
+  - Comments
+2. Add the bot user/service account as a `Developer` on each repository to mirror. Your users may need to do this depending on your access to the GitLab instance.
+
+Given your level of access to the GitLab instance, you may be able to automate the registration steps.
+
+Groups can be used to organize repos you want Hubcast to mirror:
+- [Group webhooks](https://docs.gitlab.com/user/project/integrations/webhooks/#group-webhooks) can be used to subscribe all repos in a group to a webhook
+- A service account can be given `Developer` access to all repos in a group
+
+Alternatively, scripting can be used to add your service user to each repo to mirror, and to create webhooks for the repos (the PAT must have the `Maintainer` role for this to work).
+
 ## GitLab as a destination forge
 
 Hubcast supports mirroring to any GitLab instance as the destination forge. In order to perform actions such as writing to the repository, syncing CI status, and configuring webhooks, Hubcast will need access to certain permissions. Administrator access to the GitLab destination forge is required.
@@ -105,6 +131,7 @@ Hubcast is configured via environment variables. The full set of current options
 
 - `HC_PORT`: port for Hubcast to listen on. default: `8080`.
 - `HC_LOGGING_CONFIG_PATH`: logging configuration path; the file should be in JSON and in [dictConfig](https://docs.python.org/3/library/logging.config.html#logging.config.dictConfig) format. See `/logging_config.json` for an example.
+- `HC_SRC_FORGE`: which forge repositories are mirrored from -- `github` or `gitlab`. Required; determines which of the source forge settings below are required.
 
 ### Account map settings
 
@@ -130,12 +157,25 @@ If no bind credentials are specified, the mapper will attempt a SASL/GSSAPI (e.g
 
 ### Source forge settings
 
+All source forge settings share the `HC_SRC_` prefix regardless of which forge is configured; which fields are required depends on `HC_SRC_FORGE`.
+
+Required when `HC_SRC_FORGE` is `github`:
+
 #### GitHub
 
-- `HC_GH_APP_ID`: the GitHub App ID (provided after creation)
-- `HC_GH_PRIVATE_KEY`: the contents of the app private key file, do not strip any newlines from this string
-- `HC_GH_WEBHOOK_SECRET`: the webhook secret set during the creation of the GitHub App
-- `HC_GH_BOT_CALLER`: how users invoke Hubcast's bot in a PR/MR comment. Can be a user mention (`@lc-hubcast`) or a slash command (`/lc-hubcast`). Defaults to `/hubcast`.
+- `HC_SRC_APP_ID`: the GitHub App ID (provided after creation)
+- `HC_SRC_PRIVATE_KEY`: the contents of the app private key file, do not strip any newlines from this string
+- `HC_SRC_WEBHOOK_SECRET`: the webhook secret set during the creation of the GitHub App
+- `HC_SRC_BOT_CALLER`: how users invoke Hubcast's bot in a PR/MR comment. Can be a user mention (`@lc-hubcast`) or a slash command (`/lc-hubcast`). Defaults to `/hubcast`.
+
+Required when `HC_SRC_FORGE` is `gitlab`:
+
+#### GitLab
+
+- `HC_SRC_URL`: the URL of the source GitLab instance (e.g., `https://gitlab.example.com`)
+- `HC_SRC_ACCESS_TOKEN`: the bot account's access token (scopes: `api`, `read_repository`; see [setup](#gitlab-as-a-source-forge))
+- `HC_SRC_WEBHOOK_SECRET`: the webhook secret configured on each source repository's webhook
+- `HC_SRC_BOT_CALLER`: how users invoke Hubcast's bot in an MR comment. Can be a user mention (`@lc-hubcast`) or a slash command (`/lc-hubcast`). Defaults to `/hubcast`.
 
 ### Destination forge settings (GitLab)
 

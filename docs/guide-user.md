@@ -6,7 +6,7 @@ First, identify the source and destination repositories Hubcast will be syncing.
 
 ## Configuration
 
-Hubcast settings for each repository are defined in the `hubcast.yml` file. Create this file at `.github/hubcast.yml` in your GitHub repository:
+Hubcast settings for each repository are defined in the `hubcast.yml` file. Create this file at `.github/hubcast.yml` in your GitHub repository, or `.gitlab/hubcast.yml` if your source forge is GitLab:
 
 ```yaml
 Repo:
@@ -73,6 +73,9 @@ See the [admin guide](/docs/guide-admin.md#github-as-a-source-forge) for more de
 
 The app can be installed by a maintainer of the source repository.
 
+### GitLab as a source forge
+Your Hubcast administrator maintains a bot account on the source GitLab instance and registers a webhook on each repository to mirror. Ask them to add your repository's webhook; see the [admin guide](/docs/guide-admin.md#gitlab-as-a-source-forge) for details.
+
 ## Preparing the destination repository
 
 Hubcast requires your destination repository to be configured with certain settings in order to facilitate secure mirroring and to help you avoid permissions issues.
@@ -116,11 +119,17 @@ The bot supports the following commands:
 Replace `@{bot}` with your instance's bot user (e.g., `@lc-hubcast`) or use `/hubcast` if no bot user is configured.
 
 ### Approval
-To securely mirror changes from external collaborators, approvals must be done via commenting on a PR review, ensuring that it is linked to a specific commit.
+To securely mirror changes from external collaborators, `approve` must be linked to a specific commit, to ensure we don't sync malicious commits. How this is done depends on the source forge.
 
 `approve` always syncs the reviewed commit, even for a draft PR where `sync_drafts` is disabled for the repo.
 
-![A GitHub pull request review; the user has written a comment `@lc-hubcast approve` to sync the user's contributions.](/docs/img/approve-comment.png)
+**GitHub source**: comment via a PR *review*
+
+![A GitHub pull request review; the user has written a comment `@lc-hubcast approve` to sync the user's contributions.](/docs/img/gh-approve-comment.png)
 
 > [!NOTE]
-> Commenting on lines of code modified by the PR **will not** initiate mirroring; it must be done as shown above.
+> Commenting on lines of code modified by the PR **will not** initiate mirroring on a GitHub source; it must be done as shown above.
+
+**GitLab source**: Comment on a specific line in the MR's **Changes** tab under a specific commit (`Add comment now`). A regular MR comment will not initiate mirroring.
+
+![A GitLab merge request, the user has written a comment `@lc-hubcast approve` to sync the user's contributions.](/docs/img/gl-approve-comment.png)

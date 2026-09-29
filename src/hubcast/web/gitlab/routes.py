@@ -1,11 +1,11 @@
 import logging
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from gidgetlab import routing, sansio
 
 from hubcast.clients.github.client import GitHubClient
-from hubcast.clients.gitlab.client import GitLabClient
+from hubcast.clients.gitlab.client import GitLabDestClient, GitLabSrcClient
 from hubcast.exceptions import HubcastError
 from hubcast.logging import update_log_context
 
@@ -21,6 +21,17 @@ GITLAB_TO_GITHUB_STATUS = {
     "canceled": "cancelled",  # Not a typo, GitHub with two Ls
     "skipped": "skipped",
     "success": "success",
+}
+
+# for GL->GL keep this table of selected statuses so we don't relay every event
+GITLAB_TO_GITLAB_STATUS = {
+    status: status
+    for status in ("pending", "running", "failed", "canceled", "skipped", "success")
+}
+
+STATUS_MAP = {
+    "github": GITLAB_TO_GITHUB_STATUS,
+    "gitlab": GITLAB_TO_GITLAB_STATUS,
 }
 
 
@@ -42,7 +53,7 @@ router = GitLabRouter()
 
 # STATUS RELAYS
 
-# To post status back to GitHub, we need to find the sha of the source commit from GitLab.
+# To post status back to the source, we need to find the sha of the source commit from GitLab.
 # This is trivial for regular pipelines but requires extra checks for MR pipelines.
 # GitLab creates two types of MR pipelines:
 # - regular: pipeline_sha is the source branch HEAD
@@ -52,17 +63,18 @@ router = GitLabRouter()
 @router.register("Pipeline Hook")
 async def pipeline_status_relay(
     event: sansio.Event,
-    gh: GitHubClient,
-    gl: GitLabClient,
-    gh_check_name: str,
+    src_client: GitHubClient | GitLabSrcClient,
+    gl: GitLabDestClient,
+    src_forge: Literal["github", "gitlab"],
+    src_check_name: str,
     check_types: list,
     *args,
     **kwargs,
 ) -> None:
-    """Relay status of a GitLab pipeline back to GitHub."""
+    """Relay status of a GitLab pipeline back to the source forge."""
 
     pipeline_status = event.data["object_attributes"]["status"]
-    status = GITLAB_TO_GITHUB_STATUS.get(pipeline_status)
+    status = STATUS_MAP[src_forge].get(pipeline_status)
     if not status:
         log.info("Skipped pipeline status relay", extra={"status": pipeline_status})
         return
@@ -87,7 +99,7 @@ async def pipeline_status_relay(
 
         if ref.endswith("/merge"):
             # MR merge pipelines use a synthetic merge commit, so report the source
-            # commit status back to GitHub instead.
+            # commit status back to the source forge instead.
             commit_info = await gl.get_commit(project, sha)
             sha = commit_info["parent_ids"][1]
 
@@ -95,11 +107,11 @@ async def pipeline_status_relay(
 
     if is_child_pipeline:
         pipeline_name = event.data["object_attributes"].get("name") or pipeline_id
-        name = f"{gh_check_name} / {pipeline_name}"
+        name = f"{src_check_name} / {pipeline_name}"
     else:
-        name = gh_check_name
+        name = src_check_name
 
-    await gh.set_check_status(
+    await src_client.set_check_status(
         sha,
         name,
         status,
@@ -114,24 +126,23 @@ async def pipeline_status_relay(
 @router.register("Job Hook")
 async def job_status_relay(
     event: sansio.Event,
-    gh: GitHubClient,
-    gl: GitLabClient,
-    gh_check_name: str,
+    src_client: GitHubClient | GitLabSrcClient,
+    gl: GitLabDestClient,
+    src_forge: Literal["github", "gitlab"],
+    src_check_name: str,
     check_types: list,
     *args,
     **kwargs,
 ) -> None:
-    """Relay status of a GitLab job back to GitHub."""
+    """Relay status of a GitLab job back to the source forge."""
     job_status = event.data["build_status"]
-    status = GITLAB_TO_GITHUB_STATUS.get(job_status)
+    status = STATUS_MAP[src_forge].get(job_status)
     check_title_suffix = ""
 
     # if a job does not succeed and allow_failure is enabled in the job's GitLab definition,
-    # relay the job's GitHub status as "neutral"
-    # we do this after the GL->GH status matching as GL does not have a neutral status
-    if event.data.get("build_allow_failure") and status == "failure":  # GH status
-        # neutral doesn't affect the failure
-        status = "neutral"
+    # relay the job's GH status as neutral, and GL status as success as there is no neutral status on GL
+    if event.data.get("build_allow_failure") and job_status == "failed":  # GL status
+        status = "neutral" if src_forge == "github" else "success"
         check_title_suffix = ": allowed to fail"
 
     if not status:
@@ -144,7 +155,7 @@ async def job_status_relay(
 
     if ref.startswith("refs/merge-requests/") and ref.endswith("/merge"):
         # MR merge jobs use a synthetic merge commit, so report the source
-        # commit status back to GitHub instead.
+        # commit status back to the source forge instead.
         commit_info = await gl.get_commit(project, sha)
         sha = commit_info["parent_ids"][1]
 
@@ -165,9 +176,9 @@ async def job_status_relay(
     repository_url = event.data["project"]["web_url"]
     job_url = f"{repository_url}/-/jobs/{job_id}"
 
-    name = f"{gh_check_name} / {job_name}" if gh_check_name else job_name
+    name = f"{src_check_name} / {job_name}" if src_check_name else job_name
 
-    await gh.set_check_status(
+    await src_client.set_check_status(
         sha,
         name,
         status,
