@@ -142,7 +142,7 @@ class LDAPMap(AccountMap):
 
         except ldap.LDAPError as e:
             raise HubcastError(
-                f"LDAP query failed: {e}",
+                f"LDAP query failed: {type(e).__name__}: {e}",
                 base=self.search_base,
                 filterstr=filterstr,
             ) from e
