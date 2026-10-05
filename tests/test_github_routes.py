@@ -29,6 +29,10 @@ from hubcast.web.github.messages import (
     PERMISSION_DENIED_SYNC_LOG_MSG,
     PERMISSION_DENIED_TITLE,
     PIPELINE_FAILED_MSG,
+    REPO_NOT_FOUND_DELETE_LOG_MSG,
+    REPO_NOT_FOUND_SUMMARY,
+    REPO_NOT_FOUND_SYNC_LOG_MSG,
+    REPO_NOT_FOUND_TITLE,
     WEBHOOK_PERMISSION_DENIED_SUMMARY,
     WEBHOOK_PERMISSION_DENIED_TITLE,
 )
@@ -777,34 +781,51 @@ async def test_sync_config_error_sets_error_check(
 @pytest.mark.asyncio
 @sync_cases
 @pytest.mark.parametrize(
-    "failing_op,error,expected_title,expected_summary",
+    "failing_op,error,expected_title,expected_summary,expected_log",
     [
         (
             "ls_remote",
             permission_error(401),
             PERMISSION_DENIED_TITLE,
             PERMISSION_DENIED_SUMMARY,
+            PERMISSION_DENIED_SYNC_LOG_MSG,
         ),
         (
             "ls_remote",
             permission_error(403),
             PERMISSION_DENIED_TITLE,
             PERMISSION_DENIED_SUMMARY,
+            PERMISSION_DENIED_SYNC_LOG_MSG,
         ),
         (
             "send_pack",
             permission_error(403),
             PERMISSION_DENIED_TITLE,
             PERMISSION_DENIED_SUMMARY,
+            PERMISSION_DENIED_SYNC_LOG_MSG,
         ),
         (
             "send_pack",
             RefUpdateRejected(HOOK_DECLINED_MSG),
             HOOK_DECLINED_TITLE,
             HOOK_DECLINED_SUMMARY,
+            None,
+        ),
+        (
+            "ls_remote",
+            permission_error(404),
+            REPO_NOT_FOUND_TITLE,
+            REPO_NOT_FOUND_SUMMARY,
+            REPO_NOT_FOUND_SYNC_LOG_MSG,
         ),
     ],
-    ids=["ls_remote-401", "ls_remote-403", "send_pack-403", "send_pack-hook-declined"],
+    ids=[
+        "ls_remote-401",
+        "ls_remote-403",
+        "send_pack-403",
+        "send_pack-hook-declined",
+        "ls_remote-404",
+    ],
 )
 async def test_sync_expected_error_fails_check(
     case,
@@ -812,6 +833,7 @@ async def test_sync_expected_error_fails_check(
     error,
     expected_title,
     expected_summary,
+    expected_log,
     request,
     mock_gh,
     mock_gl,
@@ -833,8 +855,9 @@ async def test_sync_expected_error_fails_check(
         summary=expected_summary,
     )
     assert case.success_log not in caplog.text
+    if expected_log:
+        assert expected_log in caplog.text
     if failing_op == "ls_remote":
-        assert PERMISSION_DENIED_SYNC_LOG_MSG in caplog.text
         mock_repligit_ops["send_pack"].assert_not_called()
 
 
@@ -1190,17 +1213,25 @@ remove_cases = pytest.mark.parametrize(
 
 @pytest.mark.asyncio
 @remove_cases
-async def test_remove_ls_remote_permission_denied(
-    case, request, mock_gh, mock_gl, mock_repligit_ops, caplog
+@pytest.mark.parametrize(
+    "error,expected_log",
+    [
+        (permission_error(), PERMISSION_DENIED_DELETE_LOG_MSG),
+        (permission_error(404), REPO_NOT_FOUND_DELETE_LOG_MSG),
+    ],
+    ids=["permission-denied", "repo-not-found"],
+)
+async def test_remove_ls_remote_expected_errors(
+    case, error, expected_log, request, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
-    """Permission errors on deletion should be logged; there is no sha to attach a check to."""
+    """Expected ls_remote errors on deletion should be logged; there is no sha to attach a check to."""
 
     event = request.getfixturevalue(case.event_fixture)
-    mock_repligit_ops["ls_remote"].side_effect = permission_error()
+    mock_repligit_ops["ls_remote"].side_effect = error
 
     await case.handler(event=event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
-    assert PERMISSION_DENIED_DELETE_LOG_MSG in caplog.text
+    assert expected_log in caplog.text
     mock_gh.set_check_status.assert_not_called()
     mock_repligit_ops["send_pack"].assert_not_called()
 

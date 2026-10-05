@@ -29,6 +29,11 @@ from hubcast.web.github.messages import (
     PERMISSION_DENIED_SYNC_LOG_MSG,
     PERMISSION_DENIED_TITLE,
     PIPELINE_FAILED_MSG,
+    REPO_NOT_FOUND_DELETE_LOG_MSG,
+    REPO_NOT_FOUND_STATUS,
+    REPO_NOT_FOUND_SUMMARY,
+    REPO_NOT_FOUND_SYNC_LOG_MSG,
+    REPO_NOT_FOUND_TITLE,
     WEBHOOK_PERMISSION_DENIED_SUMMARY,
     WEBHOOK_PERMISSION_DENIED_TITLE,
     help_message,
@@ -132,6 +137,16 @@ async def _sync_ref(
     try:
         gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     except ClientResponseError as exc:
+        if exc.status == REPO_NOT_FOUND_STATUS:
+            log.info(REPO_NOT_FOUND_SYNC_LOG_MSG)
+            await gh.set_check_status(
+                want_sha,
+                check_name,
+                "failure",
+                title=REPO_NOT_FOUND_TITLE,
+                summary=REPO_NOT_FOUND_SUMMARY,
+            )
+            return False
         if exc.status not in PERMISSION_DENIED_STATUSES:
             raise
         log.info(PERMISSION_DENIED_SYNC_LOG_MSG)
@@ -217,6 +232,9 @@ async def _delete_ref(
     try:
         gl_refs = await ls_remote(dest_remote_url, username=gl_user, password=gl_token)
     except ClientResponseError as exc:
+        if exc.status == REPO_NOT_FOUND_STATUS:
+            log.info(REPO_NOT_FOUND_DELETE_LOG_MSG)
+            return
         if exc.status not in PERMISSION_DENIED_STATUSES:
             raise
         # we cannot set GitHub status checks for deleted refs, and we have no way to notify the user of this failure

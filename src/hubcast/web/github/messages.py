@@ -17,6 +17,14 @@ PERMISSION_DENIED_SYNC_LOG_MSG = (
 )
 PERMISSION_DENIED_SUMMARY = 'Hubcast requires all users to have at least the "developer" role on the destination repository or have a repository maintainer mirror changes [on your behalf](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#secure-mirroring).'
 
+REPO_NOT_FOUND_STATUS = 404
+REPO_NOT_FOUND_TITLE = "Hubcast couldn't find the destination repository."
+REPO_NOT_FOUND_SYNC_LOG_MSG = "Failed to sync ref: destination repository not found."
+REPO_NOT_FOUND_DELETE_LOG_MSG = (
+    "Failed to delete ref: destination repository not found."
+)
+REPO_NOT_FOUND_SUMMARY = "The destination repository returned `404 Not Found`. Check that the Hubcast destination config is correct and that the destination repository exists."
+
 # raised by repligit's send_pack when the destination rejects the ref update (e.g. protected branches)
 HOOK_DECLINED_MSG = "pre-receive hook declined"
 HOOK_DECLINED_TITLE = (
