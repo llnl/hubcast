@@ -31,6 +31,8 @@ HOOK_DECLINED_TITLE = (
     "Push to GitLab failed: check branch protection settings and retry."
 )
 HOOK_DECLINED_SUMMARY = f"Hubcast got `{HOOK_DECLINED_MSG}` when pushing changes. In most cases, this happens when a force push is initiated and the destination repository has branch protection rules enabled."
+# raised by repligit's send_pack when the ref moved after hubcast found it with ls_remote, most likely due to a double sync
+STALE_OLD_VALUE_MSG = "incorrect old value provided"
 PIPELINE_FAILED_MSG = "GitLab could not start the pipeline. Investigate the issue in your GitLab CI configuration"
 
 WEBHOOK_PERMISSION_DENIED_TITLE = (

@@ -34,6 +34,7 @@ from hubcast.web.github.messages import (
     REPO_NOT_FOUND_SUMMARY,
     REPO_NOT_FOUND_SYNC_LOG_MSG,
     REPO_NOT_FOUND_TITLE,
+    STALE_OLD_VALUE_MSG,
     WEBHOOK_PERMISSION_DENIED_SUMMARY,
     WEBHOOK_PERMISSION_DENIED_TITLE,
     help_message,
@@ -203,6 +204,10 @@ async def _sync_ref(
         return False
     # repligit
     except RefUpdateRejected as exc:
+        if str(exc) == STALE_OLD_VALUE_MSG:
+            # a concurrent sync updated the ref first
+            log.info(f"Skipped {entity} sync - ref updated concurrently")
+            return False
         hook_declined = str(exc) == HOOK_DECLINED_MSG
         await gh.set_check_status(
             want_sha,
@@ -267,6 +272,9 @@ async def _delete_ref(
         return
     # repligit
     except RefUpdateRejected as exc:
+        if str(exc) == STALE_OLD_VALUE_MSG:
+            log.info(f"Skipped {entity} removal - ref updated concurrently")
+            return
         if str(exc) != HOOK_DECLINED_MSG:
             # raise unknown ref update rejected errors for later debugging
             raise
