@@ -105,6 +105,7 @@ Hubcast is configured via environment variables. The full set of current options
 
 - `HC_PORT`: port for Hubcast to listen on. default: `8080`.
 - `HC_LOGGING_CONFIG_PATH`: logging configuration path; the file should be in JSON and in [dictConfig](https://docs.python.org/3/library/logging.config.html#logging.config.dictConfig) format. See `/logging_config.json` for an example.
+- `HC_RETRIES`: number of extra attempts after a transient LDAP or HTTP failure. default: `3`; `0` disables retries. 
 
 ### Account map settings
 
@@ -125,6 +126,7 @@ If using the `ldap` map:
 - `HC_ACCOUNT_MAP_SCOPE`: the [scope of the LDAP search](https://ldap.com/the-ldap-search-operation), specified numerically. options: base (0), one (1), and sub (2).
 - `HC_ACCOUNT_MAP_BIND_DN`: the name of the bind distinguished name (optional)
 - `HC_ACCOUNT_MAP_BIND_PASSWORD`: the bind password (optional)
+- `HC_ACCOUNT_MAP_TIMEOUT`: timeout in seconds for LDAP operations (optional, default `5`)
 
 If no bind credentials are specified, the mapper will attempt a SASL/GSSAPI (e.g., Kerberos) bind.
 

@@ -86,6 +86,9 @@ class LDAPAccountMapConfig(BaseModel):
     # Bind password (optional)
     bind_password: str | None = None
 
+    # timeout in seconds for LDAP operations
+    timeout: int = Field(default=5, gt=0)
+
 
 AccountMapConfig = Annotated[
     FileAccountMapConfig | LDAPAccountMapConfig,
@@ -106,6 +109,9 @@ class Config(BaseSettings):
 
     # Path to logging config JSON file (dictConfig format, optional)
     logging_config_path: str | None = None
+
+    # extra attempts after transient HTTP/LDAP failures (disable with 0)
+    retries: int = Field(default=3, ge=0)
 
     # Account mapper configuration (file or ldap)
     account_map: AccountMapConfig

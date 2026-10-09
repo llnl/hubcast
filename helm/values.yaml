@@ -99,6 +99,9 @@ hubcast:
   # Logging configuration path (optional)
   loggingConfigPath: ""
 
+  # Extra attempts after LDAP/HTTP connection failures (disabled w/ 0)
+  retries: 3
+
   # Account Map Type: "file" or "ldap"
   accountMapType: "file"
 
@@ -125,6 +128,8 @@ hubcast:
     scope: 2
     # LDAP bind DN (optional, for authenticated binds)
     bindDn: ""
+    # LDAP timeout in seconds
+    timeout: 5
 
   # GitHub Settings
   github:

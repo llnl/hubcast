@@ -43,6 +43,8 @@ spec:
         # General Settings
         - name: HC_PORT
           value: {{ .Values.hubcast.port | quote }}
+        - name: HC_RETRIES
+          value: {{ .Values.hubcast.retries | quote }}
         {{- if .Values.hubcast.loggingConfigPath }}
         - name: HC_LOGGING_CONFIG_PATH
           value: {{ .Values.hubcast.loggingConfigPath | quote }}
@@ -70,6 +72,8 @@ spec:
           value: {{ .Values.hubcast.ldap.output | quote }}
         - name: HC_ACCOUNT_MAP_SCOPE
           value: {{ .Values.hubcast.ldap.scope | quote }}
+        - name: HC_ACCOUNT_MAP_TIMEOUT
+          value: {{ .Values.hubcast.ldap.timeout | default 5 | quote }}
         {{- if .Values.hubcast.ldap.bindDn }}
         - name: HC_ACCOUNT_MAP_BIND_DN
           value: {{ .Values.hubcast.ldap.bindDn | quote }}

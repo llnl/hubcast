@@ -7,6 +7,7 @@ from pathlib import Path
 from aiohttp import web
 from aiojobs.aiohttp import setup
 
+from hubcast import retry
 from hubcast.account_map import FileMap
 from hubcast.account_map.abc import AccountMap
 from hubcast.account_map.file import FileMapError
@@ -92,6 +93,7 @@ def initialize_account_map(conf: Config) -> AccountMap:
                 ldap_config.scope,
                 ldap_config.bind_dn,
                 ldap_config.bind_password,
+                ldap_config.timeout,
             )
 
 
@@ -105,6 +107,7 @@ def main():
         sys.exit(1)
 
     initialize_logging(conf)
+    retry.retries = conf.retries
 
     account_map = initialize_account_map(conf)
     gh_client_factory = GitHubClientFactory(
