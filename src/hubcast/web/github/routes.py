@@ -205,9 +205,13 @@ async def _sync_ref(
     # repligit
     except RefUpdateRejected as exc:
         if str(exc) == STALE_OLD_VALUE_MSG:
-            # a concurrent sync updated the ref first
-            log.info(f"Skipped {entity} sync - ref updated concurrently")
-            return False
+            # a concurrent sync may have updated the ref first; check if the want_sha is available on the dest (if not, we'll see an exception)
+            current_refs = await ls_remote(
+                dest_remote_url, username=gl_user, password=gl_token
+            )
+            if want_sha in current_refs.values():
+                log.info(f"Skipped {entity} sync - ref updated concurrently")
+                return True
         hook_declined = str(exc) == HOOK_DECLINED_MSG
         await gh.set_check_status(
             want_sha,
@@ -273,8 +277,13 @@ async def _delete_ref(
     # repligit
     except RefUpdateRejected as exc:
         if str(exc) == STALE_OLD_VALUE_MSG:
-            log.info(f"Skipped {entity} removal - ref updated concurrently")
-            return
+            # a concurrent sync may have deleted the ref first; check if the want_sha is now gone on the dest (if not, we'll see an exception)
+            current_refs = await ls_remote(
+                dest_remote_url, username=gl_user, password=gl_token
+            )
+            if sync_ref not in current_refs:
+                log.info(f"Skipped {entity} removal - ref removed concurrently")
+                return
         if str(exc) != HOOK_DECLINED_MSG:
             # raise unknown ref update rejected errors for later debugging
             raise
