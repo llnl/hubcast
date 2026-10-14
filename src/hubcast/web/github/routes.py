@@ -205,11 +205,11 @@ async def _sync_ref(
     # repligit
     except RefUpdateRejected as exc:
         if str(exc) == STALE_OLD_VALUE_MSG:
-            # a concurrent sync may have updated the ref first; check if the want_sha is available on the dest (if not, we'll see an exception)
+            # a concurrent sync may have updated the ref first; check that sync_ref on the dest now points at want_sha (if not, we'll see an exception)
             current_refs = await ls_remote(
                 dest_remote_url, username=gl_user, password=gl_token
             )
-            if want_sha in current_refs.values():
+            if current_refs.get(sync_ref) == want_sha:
                 log.info(f"Skipped {entity} sync - ref updated concurrently")
                 return True
         hook_declined = str(exc) == HOOK_DECLINED_MSG
