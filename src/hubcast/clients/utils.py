@@ -7,7 +7,7 @@ import aiohttp
 from hubcast import retry
 
 # rate limited, or gateway/availability errors
-RETRYABLE_STATUSES = frozenset({429, 502, 503, 504})
+RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 
 class TokenCache:
@@ -54,7 +54,7 @@ Response = tuple[int, Mapping[str, str], bytes]
 async def with_retries(
     send: Callable[[], Awaitable[Response]], method: str, url: str
 ) -> Response:
-    """Await send() and retry on connection errors, timeouts, and HTTP 429/502/503/504. Applies to all HTTP methods."""
+    """Await send() and retry on connection errors, timeouts, and HTTP 429/500/502/503/504. Applies to all HTTP methods."""
     for attempt in range(retry.retries):
         try:
             response = await send()
