@@ -111,7 +111,7 @@ The bot supports the following commands:
 - `@{bot} help` - Display available commands and usage information
 - `@{bot} approve` - Mirror this PR to the destination repo; Hubcast will push commits and run pipelines on behalf of the commenter
 - `@{bot} restart pipeline` - Request a restart of the latest GitLab CI pipeline
-- `@{bot} restart failed jobs` - Restart any failed jobs in the latest CI pipeline
+- `@{bot} restart failed jobs` - Restart any failed jobs in the latest CI pipeline, including child pipelines
 
 Replace `@{bot}` with your instance's bot user (e.g., `@lc-hubcast`) or use `/hubcast` if no bot user is configured.
 
