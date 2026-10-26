@@ -355,17 +355,22 @@ async def test_github_dispatch_logs_hubcast_errors():
 
 
 @pytest.mark.asyncio
-async def test_sync_branch_skip_open_pr(
-    mock_push_event, mock_gh, mock_gl, mock_repligit_ops, caplog
+async def test_sync_branch_with_open_pr(
+    mock_push_event, mock_gh, mock_gl, mock_repligit_ops
 ):
-    """Branches should not be synced if there is an open PR for the branch."""
-
-    # mocking hubcast.clients.github.client.GitHubClient.get_prs
-    mock_gh.get_prs.return_value = [123]  # Simulate an open PR exists
+    """Pushes to internal PR branches sync the pushed commit."""
+    mock_push_event.data["ref"] = "refs/heads/feature-branch"
+    mock_gh.get_prs.return_value = [123]
 
     await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
-    assert "Skipped branch sync - branch has open PR" in caplog.text
+    mock_repligit_ops["send_pack"].assert_awaited_once()
+    assert mock_repligit_ops["send_pack"].await_args.args[1:4] == (
+        "refs/heads/feature-branch",
+        "0" * 40,
+        "sha-123",
+    )
+    mock_gh.get_prs.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -634,20 +639,29 @@ async def test_sync_pr_synced_fork(
 
 
 @pytest.mark.asyncio
-async def test_sync_pr_synced_internal(
+async def test_sync_pr_skips_internal(
     mock_pr_event, mock_gh, mock_gl, mock_repligit_ops, caplog
 ):
-    """PR sync should proceed if all conditions are met (internal branch)."""
-
-    # make head and base the same repo to simulate internal branch
+    """Internal PR events do not sync the ref (push events do) but still create MRs."""
     mock_pr_event.data["pull_request"]["head"]["repo"]["full_name"] = "owner/repo"
-    mock_pr_event.data["pull_request"]["base"]["repo"]["full_name"] = "owner/repo"
-
-    mock_repligit_ops["ls_remote"].return_value = {"refs/heads/main": "old-sha"}
+    mock_pr_event.data["pull_request"]["title"] = "Test PR"
+    mock_pr_event.data["pull_request"]["html_url"] = (
+        "https://github.com/owner/repo/pull/123"
+    )
+    mock_repligit_ops["get_repo_config"].return_value = Mock(
+        dest_org="owner",
+        dest_name="repo",
+        dest_fullname="owner/repo",
+        create_mr=True,
+    )
+    mock_gl.get_mr = AsyncMock(return_value=None)
+    mock_gl.create_mr = AsyncMock()
 
     await sync_pr_event(event=mock_pr_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
-    assert "Synced PR" in caplog.text
+    assert "Skipped PR sync - internal branch synced on push" in caplog.text
+    mock_repligit_ops["send_pack"].assert_not_called()
+    mock_gl.create_mr.assert_called_once()
 
 
 @pytest.mark.asyncio

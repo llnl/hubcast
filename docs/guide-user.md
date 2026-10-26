@@ -35,6 +35,8 @@ Repo:
 
   # Optional: sync draft PRs/MRs (default: true)
   # regardless of this setting, a draft PR can still be synced manually with `approve`
+  # branches internal to the repository are always synced on push; for them this
+  # setting only controls whether an MR is created (see create_mr)
   sync_drafts: true
 
   # Optional: post message when draft sync is disabled (default: true)
