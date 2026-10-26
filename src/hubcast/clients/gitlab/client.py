@@ -265,8 +265,8 @@ class GitLabClient:
             return pipeline.get("web_url")
 
     async def retry_pipeline_jobs(self, gl_fullname: str, pipeline_id: int) -> str:
-        """retries any failed jobs in a pipeline. if there are no jobs that meet this criteria,
-        calling this has no effect
+        """retries any failed jobs in a pipeline, including failed jobs in its child
+        pipelines. if there are no jobs that meet this criteria, calling this has no effect
         Returns:
             the pipeline's url
         """
@@ -283,11 +283,31 @@ class GitLabClient:
 
             repo_id = urllib.parse.quote_plus(gl_fullname)
 
+            await self._retry_child_pipelines(gl, gl_fullname, repo_id, pipeline_id)
+
             pipeline = await gl.post(
                 f"/projects/{repo_id}/pipelines/{pipeline_id}/retry", data={}
             )
 
             return pipeline.get("web_url")
+
+    async def _retry_child_pipelines(
+        self, gl: GitLabAPI, gl_fullname: str, repo_id: str, pipeline_id: int
+    ) -> None:
+        """recursively retries child pipelines, found via the pipeline's bridge
+        (trigger) jobs. downstream pipelines in other projects are skipped."""
+        async for bridge in gl.getiter(
+            f"/projects/{repo_id}/pipelines/{pipeline_id}/bridges"
+        ):
+            child = bridge.get("downstream_pipeline")
+            if not child or f"/{gl_fullname}/-/pipelines/" not in child.get(
+                "web_url",
+                "",  # skip child pipelines in other projects
+            ):
+                continue
+
+            await self._retry_child_pipelines(gl, gl_fullname, repo_id, child["id"])
+            await gl.post(f"/projects/{repo_id}/pipelines/{child['id']}/retry", data={})
 
     async def retry_job(self, gl_fullname: str, job_id: int) -> str:
         """retries a single job in a GitLab pipeline.

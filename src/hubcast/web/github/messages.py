@@ -71,7 +71,7 @@ You can interact with me in many ways!
     - Hubcast will perform actions on behalf of the commenter
     - Must be called using the [GitHub review comment feature](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#approval)
 - `{bot_caller} restart pipeline`: request a restart of the latest GitLab CI pipeline
-- `{bot_caller} restart failed jobs`: restart any failed jobs in the latest pipeline
+- `{bot_caller} restart failed jobs`: restart any failed jobs in the latest pipeline, including child pipelines
 - `{bot_caller} help`: see this message
 
 If you are an outside contributor, a maintainer will need to mirror your changes using the `{bot_caller} approve` command.
