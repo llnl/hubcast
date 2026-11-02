@@ -44,9 +44,9 @@ Repo:
 
   # Optional: create GitLab MRs from GitHub PRs
   # allows developers to create synthetic merge commits using GitLab's merged results pipelines feature
-# allows developers to create synthetic merge commits using GitLab's merged results pipelines feature
-# if sync is skipped (see sync_drafts), the MR will not be created
-create_mr: false
+  # allows developers to create synthetic merge commits using GitLab's merged results pipelines feature
+  # if sync is skipped (see sync_drafts), the MR will not be created
+  create_mr: false
 ```
 
 A minimal configuration requires only `dest_org` and `dest_name`:
