@@ -35,6 +35,8 @@ Repo:
 
   # Optional: sync draft PRs/MRs (default: true)
   # regardless of this setting, a draft PR can still be synced manually with `approve`
+  # this setting controls whether PRs from forks are synced
+  # internal branches are always synced
   sync_drafts: true
 
   # Optional: post message when draft sync is disabled (default: true)
@@ -42,6 +44,7 @@ Repo:
 
   # Optional: create GitLab MRs from GitHub PRs
   # allows developers to create synthetic merge commits using GitLab's merged results pipelines feature
+  # if sync is skipped (see sync_drafts), the MR will not be created
   create_mr: false
 ```
 

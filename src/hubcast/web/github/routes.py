@@ -315,11 +315,6 @@ async def sync_branch(
 
     update_log_context(ref=sync_ref)
 
-    # skip branches from push events that are also pull requests
-    if await gh.get_prs(branch=sync_ref):
-        log.info("Skipped branch sync - branch has open PR")
-        return
-
     default_branch = event.data["repository"]["default_branch"]
     is_default_branch = sync_ref == f"refs/heads/{default_branch}"
     changed_files = changed_files_from_push(event.data)
@@ -546,22 +541,27 @@ async def sync_pr(
             ),
         }
 
-    synced = await _sync_ref(
-        gh,
-        gl,
-        gl_user,
-        dest_remote_url,
-        sync_ref,
-        want_sha,
-        src_repo_url,
-        get_src_creds,
-        check_name=repo_config.check_name,
-        entity="PR",
-    )
+    # internal branches are synced by their push events to avoid double syncs;
+    # the draft check above and MR creation below still apply
+    if is_pull_request_fork:
+        synced = await _sync_ref(
+            gh,
+            gl,
+            gl_user,
+            dest_remote_url,
+            sync_ref,
+            want_sha,
+            src_repo_url,
+            get_src_creds,
+            check_name=repo_config.check_name,
+            entity="PR",
+        )
 
-    # sync failed (logged in _sync_ref)
-    if not synced:
-        return
+        # sync failed (logged in _sync_ref)
+        if not synced:
+            return
+    else:
+        log.info("Skipped PR sync - internal branch synced on push")
 
     # create MRs if configured
     # skip already created MRs
