@@ -32,14 +32,19 @@ async def retry_async(
     func: Callable[[], Awaitable[T]],
     retryable: tuple[type[BaseException], ...],
     name: str,
+    retry_if: Callable[[BaseException], bool] | None = None,
 ) -> T:
     """
     Await func() and retry it when a "retryable" exception is raised.
+
+    If retry_if is provided, retries occur only when retry_if(exception) is true
     """
     for attempt in range(retries):
         try:
             return await func()
         except retryable as e:
+            if retry_if is not None and not retry_if(e):
+                raise
             # try again
             await asyncio.sleep(retry_delay(name, attempt, repr(e)))
     return await func()

@@ -1,8 +1,10 @@
+import asyncio
 import logging
 import re
 from collections.abc import Awaitable, Callable, Collection
 from typing import Any
 
+import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
 from gidgethub import routing, sansio
 from gidgetlab.exceptions import BadRequest
@@ -11,8 +13,10 @@ from repligit.exceptions import RefUpdateRejected
 
 from hubcast.clients.github.client import GitHubClient
 from hubcast.clients.gitlab.client import GitLabClient
+from hubcast.clients.utils import RETRYABLE_STATUSES
 from hubcast.exceptions import HubcastError, RepoConfigError, WebhookPermissionError
 from hubcast.logging import update_log_context
+from hubcast.retry import retry_async
 from hubcast.web.github.messages import (
     CONFIG_VALID_SUMMARY,
     CONFIG_VALID_TITLE,
@@ -115,7 +119,47 @@ def _permission_denied_response(exc: BadRequest) -> str:
     return PERMISSION_DENIED_SUMMARY
 
 
-async def _sync_ref(
+# transient failures that come from repligit, specific HTTP statuses are filtered by _is_transient
+REPLIGIT_RETRYABLE = (
+    TimeoutError,
+    aiohttp.ClientConnectionError,
+    aiohttp.ClientPayloadError,
+    aiohttp.ClientResponseError,
+    asyncio.IncompleteReadError,
+)
+
+
+def _is_transient(exc: BaseException) -> bool:
+    """If a failure is worth retrying (HTTP 429/5xx etc)"""
+    if isinstance(exc, ClientResponseError):
+        return exc.status in RETRYABLE_STATUSES
+    return True
+
+
+async def _sync_ref(*args: Any, **kwargs: Any) -> bool:
+    """Wrapper for _sync_ref_once, retrying common network failures.
+    Common repligit operations depend on external state (refs/packfile contents),
+    so each retry redoes the entire sequence.
+    """
+    return await retry_async(
+        lambda: _sync_ref_once(*args, **kwargs),
+        REPLIGIT_RETRYABLE,
+        name="Repligit sync",
+        retry_if=_is_transient,
+    )
+
+
+async def _delete_ref(*args: Any, **kwargs: Any) -> None:
+    """Wrapper for _delete_ref_once, retrying common network failures (see _sync_ref)"""
+    await retry_async(
+        lambda: _delete_ref_once(*args, **kwargs),
+        REPLIGIT_RETRYABLE,
+        name="Repligit delete",
+        retry_if=_is_transient,
+    )
+
+
+async def _sync_ref_once(
     gh: GitHubClient,
     gl: GitLabClient,
     gl_user: str,
@@ -228,7 +272,7 @@ async def _sync_ref(
     return True
 
 
-async def _delete_ref(
+async def _delete_ref_once(
     gl: GitLabClient,
     gl_user: str,
     dest_remote_url: str,
