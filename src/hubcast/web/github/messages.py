@@ -15,7 +15,7 @@ PERMISSION_DENIED_DELETE_LOG_MSG = (
 PERMISSION_DENIED_SYNC_LOG_MSG = (
     "Failed to sync ref: insufficient permissions on destination repository."
 )
-PERMISSION_DENIED_SUMMARY = 'Hubcast requires all users to have at least the "developer" role on the destination repository or have a repository maintainer mirror changes [on your behalf](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#secure-mirroring).'
+PERMISSION_DENIED_SUMMARY = 'Hubcast requires all users to have at least the "developer" role on the destination repository or have a repository maintainer mirror changes [on your behalf](https://github.com/llnl/hubcast/blob/main/docs/guide-user.md#approval).'
 
 REPO_NOT_FOUND_STATUS = 404
 REPO_NOT_FOUND_TITLE = "Hubcast couldn't find the destination repository."
