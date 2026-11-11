@@ -2,7 +2,7 @@ import logging
 from typing import Any
 
 import aiohttp
-from gidgethub import HTTPException, QueryError
+from gidgethub import BadRequest, HTTPException, QueryError
 
 from hubcast.retry import retry_async
 
@@ -122,7 +122,16 @@ class GitHubClient:
                 await gh.post(url, data=payload)
             else:
                 url = f"/repos/{self.repo_owner}/{self.repo_name}/check-runs/{existing_check['id']}"
-                await gh.patch(url, data=payload)
+                # possible replication lag within GitHub's API returns 404 intermittently
+                # when attempting to update an existing check shortly after it was created
+                await retry_async(
+                    lambda: gh.patch(url, data=payload),
+                    (BadRequest,),
+                    name="Check update",
+                    retry_if=lambda e: (
+                        isinstance(e, BadRequest) and e.status_code == 404
+                    ),
+                )
 
     async def get_repo_config(self, ref: str | None = None) -> str | None:
         """Get the contents of the repo's hubcast config file.
