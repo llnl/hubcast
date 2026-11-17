@@ -99,6 +99,7 @@ async def pipeline_status_relay(
     else:
         name = gh_check_name
 
+    update_log_context(check_name=name, check_status=status)
     await gh.set_check_status(
         sha,
         name,
@@ -108,7 +109,7 @@ async def pipeline_status_relay(
         details_url=pipeline_url,
     )
 
-    log.info("Relayed pipeline status", extra={"status": status})
+    log.info("Relayed pipeline status")
 
 
 @router.register("Job Hook")
@@ -166,6 +167,7 @@ async def job_status_relay(
     job_url = f"{repository_url}/-/jobs/{job_id}"
 
     name = f"{gh_check_name} / {job_name}" if gh_check_name else job_name
+    update_log_context(check_name=name, check_status=status)
 
     await gh.set_check_status(
         sha,
@@ -176,4 +178,4 @@ async def job_status_relay(
         details_url=job_url,
     )
 
-    log.info("Relayed job status", extra={"status": status})
+    log.info("Relayed job status")
