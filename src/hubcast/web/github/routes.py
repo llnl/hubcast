@@ -337,6 +337,19 @@ async def _delete_ref_once(
     log.info(f"Deleted {entity}")
 
 
+async def _config_content_changed(gh: GitHubClient, push: dict[str, Any]) -> bool:
+    """Whether the repo config differs between the push's before and after commits."""
+    before = push.get("before")
+    # a brand new ref has no previous commit to read from
+    before_config = (
+        None
+        if not before or before == NULL_SHA
+        else await gh.get_repo_config(ref=before)
+    )
+    after_config = await gh.get_repo_config(ref=push["after"])
+    return before_config != after_config
+
+
 # -----------------------------------
 # Push Events
 # -----------------------------------
@@ -383,10 +396,15 @@ async def sync_branch(
     head_commit = event.data.get("head_commit")
     commit_msg = head_commit["message"] if head_commit else ""
 
-    # only set/update the webhook on default branch pushes that touch the config
-    # file (avoids spurious permission errors on unrelated pushes); maintainers
+    # only set/update the webhook on default branch pushes that change the config
+    # (avoids spurious permission errors on unrelated pushes); maintainers
     # can also force it by including [hubcast config] in the commit message
-    if is_default_branch and (config_changed or "[hubcast config]" in commit_msg):
+    if is_default_branch and (
+        "[hubcast config]" in commit_msg
+        # the payload lists files from every commit in the push (including merged
+        # branch history), so confirm the config content really changed
+        or (config_changed and await _config_content_changed(gh, event.data))
+    ):
         try:
             await gl.set_webhook(
                 dest_org=repo_config.dest_org,
