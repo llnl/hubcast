@@ -73,6 +73,7 @@ def mock_push_event():
             "full_name": "owner/repo",
             "default_branch": "main",
         },
+        "before": "sha-000",
         "after": "sha-123",
         "head_commit": {"id": "sha-123", "message": "update app"},
         "ref": "refs/heads/main",
@@ -461,6 +462,10 @@ async def test_sync_branch_webhook_gating(
     mock_push_event.data["commits"] = [
         {"added": [], "modified": modified, "removed": []}
     ]
+    # the config content differs between the before and after commits
+    mock_gh.get_repo_config.side_effect = lambda ref=None: (
+        "old config" if ref == "sha-000" else None
+    )
 
     await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
 
@@ -480,6 +485,9 @@ async def test_sync_branch_webhook_permission_denied(
     mock_push_event.data["commits"] = [
         {"added": [], "modified": [".github/hubcast.yml"], "removed": []}
     ]
+    mock_gh.get_repo_config.side_effect = lambda ref=None: (
+        "old config" if ref == "sha-000" else None
+    )
     mock_gl.set_webhook.side_effect = WebhookPermissionError("not a maintainer")
 
     await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
@@ -505,6 +513,9 @@ async def test_sync_branch_webhook_internal_error(
     mock_push_event.data["commits"] = [
         {"added": [], "modified": [".github/hubcast.yml"], "removed": []}
     ]
+    mock_gh.get_repo_config.side_effect = lambda ref=None: (
+        "old config" if ref == "sha-000" else None
+    )
     mock_gl.set_webhook.side_effect = HubcastError("GitLab rejected hubcast's token")
 
     await sync_branch(event=mock_push_event, gh=mock_gh, gl=mock_gl, gl_user="gl-user")
